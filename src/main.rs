@@ -7,12 +7,12 @@ use anyhow::Result;
 
 fn main() -> Result<()> {
     pretty_env_logger::formatted_builder()
-        .filter_level(log::LevelFilter::Trace)
+        .filter_level(log::LevelFilter::Debug)
         .init();
     let mut file = OpenOptions::new().read(true).write(false).open("test.mc")?;
     let mut raw = String::new();
     file.read_to_string(&mut raw)?;
-    info!("{:#?}", parser::parse_base_tokens(raw));
+    let _tokens = parser::tokenize(raw)?;
     Ok(())
 }
 
@@ -25,6 +25,10 @@ pub mod parser {
         IncompleteCommentExpr,
         #[error("Number literal terminated with an invalid charecter")]
         InvalidNumberLiteral,
+        #[error("Invalid token folowing const, const ident, or let expression (not a valid variable name)")]
+        InavlidVarName,
+        #[error("Invalid type name")]
+        InvalidType,
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -38,7 +42,7 @@ pub mod parser {
 
     }
 
-    pub fn parse_base_tokens(data: String) -> Result<Vec<BaseToken>, ParseError> {
+    pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, ParseError> {
         let mut base_tokens: Vec<BaseToken> = vec![];
         let mut chars = data.chars().peekable();
         let mut current_word = String::new();
@@ -114,7 +118,7 @@ pub mod parser {
                         base_tokens.push(BaseToken::StringLiteral(string_literal));
                     }
                     num if num.is_digit(10) => {
-                        info!("parsing numeric literal");
+                        trace!("parsing numeric literal");
                         let mut digits: String = String::from(num);
                         loop {
                             match chars.peek() {
@@ -137,22 +141,29 @@ pub mod parser {
                         base_tokens.push(BaseToken::NumberLiteral(number));
                     }
                     ch if ch.is_ascii_whitespace() => {
-                        info!("new word parsed: {}", current_word);
+                        trace!("new word parsed: {}", current_word);
                         if !current_word.is_empty() {
                             base_tokens.push(BaseToken::Word(current_word));
                             current_word = String::new();
                         }
                     }
                     ';' => {
-                        info!("reached EOL");
+                        trace!("reached EOL");
                         if !current_word.is_empty() {
                             base_tokens.push(BaseToken::Word(current_word));
                             current_word = String::new();
                         }
                         base_tokens.push(BaseToken::EOL);
                     }
+                    ':'  | '=' => {
+                        if !current_word.is_empty() {
+                            base_tokens.push(BaseToken::Word(current_word));
+                            current_word = String::new();
+                        }
+                        base_tokens.push(BaseToken::Word(ch.to_string()))
+                    }
                     other => {
-                        info!("parsing next word");
+                        trace!("parsing next word");
                         current_word.push(other);
                         while let Some(next) = chars.peek() {
                             match next {
@@ -160,6 +171,9 @@ pub mod parser {
                                     break;
                                 }
                                 ';' => {
+                                    break;
+                                }
+                                '"' | ':'  | '=' => {
                                     break;
                                 }
                                 _ => {
@@ -176,11 +190,91 @@ pub mod parser {
         Ok(base_tokens)
     }
 
-    pub fn tokenize(data: String) -> Result<impl Iterator<Item = Token>, ParseError> {
-        let base_tokens = parse_base_tokens(data)?;
-        Ok(vec![].into_iter())
+    pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, ParseError> {
+        let mut token_stream = tokens.into_iter().peekable();
+        let mut tokens: Vec<Token> = vec![];
+
+        while let Some(next_token) = token_stream.next() {
+            match next_token {
+                BaseToken::EOL => tokens.push(Token::EOL),
+                BaseToken::NumberLiteral(num) => tokens.push(Token::Literal(Literal::Number(num))),
+                BaseToken::StringLiteral(string) => tokens.push(Token::Literal(Literal::String(string))),
+                BaseToken::Word(word) => {
+                    match &*word {
+                        "const" => {
+                            let t = match token_stream.peek() {
+                                Some(BaseToken::Word(word)) if word == "ident" => {
+                                    let _ = token_stream.next();
+                                    Token::Keyword(Keyword::ObjectIdent)
+                                }
+                                _ => Token::Keyword(Keyword::Const)
+                            };
+                            tokens.push(t);
+                        },
+                        "let" => tokens.push(Token::Keyword(Keyword::Let)), //TODO intigrate this into the `const` branch
+                        "=" => tokens.push(Token::Assignment(AssignmentOperator::Assign)),
+                        other => {
+                            match tokens.last() {
+                                Some(Token::OtherGrammar(OtherGrammar::TypeHint)) => {
+                                    let mut chars = other.chars().peekable();
+                                    if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
+                                        tokens.push(Token::Type(other.to_string()));
+                                    } else {
+                                        return Err(ParseError::InvalidType)
+                                    }
+                                }
+                                Some(Token::Keyword(Keyword::Let | Keyword::Const | Keyword::ObjectIdent)) => {
+                                    // match token_stream.next() {
+                                    //     Some(BaseToken::Word(mut var_name)) => {
+                                    //         //TODO optimize this (its terrible)
+                                    //         let mut chars = var_name.chars().peekable();
+                                    //         if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
+                                    //             tokens.push(Token::Ident(var_name))
+                                    //         } else if var_name.chars().last().unwrap() == ':' {
+                                    //             let _ = var_name.pop();
+                                    //             let mut chars = var_name.chars().peekable();
+                                    //             if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
+                                    //                 tokens.push(Token::Ident(var_name));
+                                    //                 tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint));
+                                    //             } else {
+                                    //                 return Err(ParseError::InavlidVarName)
+                                    //             }
+                                    //         } else {
+                                    //             return Err(ParseError::InavlidVarName)
+                                    //         }
+                                    //     }
+                                    //     _ => return Err(ParseError::InavlidVarName)
+                                    // }
+                                }
+                                _ => {}
+                            }
+                            // if other.ends_with(':') {
+                            //     let mut other_str = other.to_string();
+                            //     let _ = other_str.pop();
+                            //     tokens.push(Token::Word(other_str));
+                            //     Token::OtherGrammar(OtherGrammar::TypeHint)
+                            // } else {
+                            //     Token::Word(other.to_string())
+                            // }
+                            tokens.push(Token::Word(other.to_string()))
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(tokens)
     }
 
+    pub fn tokenize(data: String) -> Result<Vec<Token>, ParseError> {
+        let base_tokens = base_lexer(data)?;
+        debug!("{base_tokens:#?}");
+        let tokens = advanced_lexer(base_tokens)?;
+        debug!("{tokens:#?}");
+        Ok(tokens)
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub enum Keyword {
         Const,
         /// object identifier (such as a bound block name. MUST BE COMPILE TIME KNOWN)
@@ -188,17 +282,13 @@ pub mod parser {
         Let,
     }
 
-    pub enum Type {
-        String,
-        Number,
-        Null,
-    }
-
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Literal {
         String(String),
         Number(f64),
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub enum AssignmentOperator {
         Assign,
         // PlusEquals,
@@ -207,6 +297,13 @@ pub mod parser {
         // DivEquals,
     }
 
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    pub enum OtherGrammar {
+        /// type hint `:` symbol
+        TypeHint,
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Token {
         ScopeBegin,
         ScopeEnd,
@@ -216,12 +313,16 @@ pub mod parser {
         Literal(Literal),
         /// A Keyword, such as `let` or `const`
         Keyword(Keyword),
-        /// a variable type
-        Type(Type),
-        /// a ident, such as a variable name
-        Identifier(String),
+        /// some other grammar thing
+        OtherGrammar(OtherGrammar),
         /// a assignment operation, such as `=`
         Assignment(AssignmentOperator),
+        /// something else
+        Word(String),
+        /// a variable name
+        Ident(String),
+        /// a type (as a string)
+        Type(String),
     }
 }
 
