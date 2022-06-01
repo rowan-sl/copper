@@ -42,6 +42,11 @@ pub mod parser {
 
     }
 
+    fn qualifies_for_var(dat: &String) -> bool {
+        let mut chars = dat.chars().peekable();
+        (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_'))
+    }
+
     pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, ParseError> {
         let mut base_tokens: Vec<BaseToken> = vec![];
         let mut chars = data.chars().peekable();
@@ -155,7 +160,7 @@ pub mod parser {
                         }
                         base_tokens.push(BaseToken::EOL);
                     }
-                    ':'  | '=' => {
+                    ':'  | '=' | '(' | ')' | '{' | '}' | '.' => {
                         if !current_word.is_empty() {
                             base_tokens.push(BaseToken::Word(current_word));
                             current_word = String::new();
@@ -173,7 +178,7 @@ pub mod parser {
                                 ';' => {
                                     break;
                                 }
-                                '"' | ':'  | '=' => {
+                                '"' | ':'  | '=' | '(' | ')' | '{' | '}' | '.' => {
                                     break;
                                 }
                                 _ => {
@@ -212,61 +217,23 @@ pub mod parser {
                             tokens.push(t);
                         },
                         "let" => tokens.push(Token::Keyword(Keyword::Let)), //TODO intigrate this into the `const` branch
-                        "=" => tokens.push(Token::Assignment(AssignmentOperator::Assign)),
+                        "=" => tokens.push(Token::Operator(Operator::Assign)),
+                        "." => tokens.push(Token::Operator(Operator::Dot)),
                         ":" => tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint)),
+                        "(" | ")" | "{" | "}" => {
+                            tokens.push(match &*word {
+                                "(" => Token::ParenBegin,
+                                ")" => Token::ParenEnd,
+                                "{" => Token::ScopeBegin,
+                                "}" => Token::ScopeEnd,
+                                _ => unreachable!()
+                            });
+                        }
+                        "true" => tokens.push(Token::Literal(Literal::Bool(true))),
+                        "false" => tokens.push(Token::Literal(Literal::Bool(false))),
+                        "if" => tokens.push(Token::Keyword(Keyword::If)),
+                        "else" => tokens.push(Token::Keyword(Keyword::Else)),
                         other => {
-                            // match tokens.last() {
-                            //     Some(Token::OtherGrammar(OtherGrammar::TypeHint)) => {
-                            //         let mut chars = other.chars().peekable();
-                            //         if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
-                            //             tokens.push(Token::Type(other.to_string()));
-                            //         } else {
-                            //             return Err(ParseError::InvalidType)
-                            //         }
-                            //     }
-                                // Some(Token::Keyword(Keyword::Let | Keyword::Const | Keyword::ObjectIdent)) => {
-                                //     let kwd = if let Some(Token::Keyword(kwd)) = tokens.last() {
-                                //         kwd.clone()
-                                //     } else {
-                                //         unreachable!()
-                                //     };
-                                //     match kwd {
-                                //         Keyword::Let => {}
-                                //         Keyword::Const => {}
-                                //         Keyword::ObjectIdent => {}
-                                //     }
-                                    // match token_stream.next() {
-                                    //     Some(BaseToken::Word(mut var_name)) => {
-                                    //         //TODO optimize this (its terrible)
-                                    //         let mut chars = var_name.chars().peekable();
-                                    //         if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
-                                    //             tokens.push(Token::Ident(var_name))
-                                    //         } else if var_name.chars().last().unwrap() == ':' {
-                                    //             let _ = var_name.pop();
-                                    //             let mut chars = var_name.chars().peekable();
-                                    //             if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
-                                    //                 tokens.push(Token::Ident(var_name));
-                                    //                 tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint));
-                                    //             } else {
-                                    //                 return Err(ParseError::InavlidVarName)
-                                    //             }
-                                    //         } else {
-                                    //             return Err(ParseError::InavlidVarName)
-                                    //         }
-                                    //     }
-                                    //     _ => return Err(ParseError::InavlidVarName)
-                                    // }
-                                // }
-                                // _ => {}
-                            // }
-                            // if other.ends_with(':') {
-                            //     let mut other_str = other.to_string();
-                            //     let _ = other_str.pop();
-                            //     tokens.push(Token::Word(other_str));
-                            //     Token::OtherGrammar(OtherGrammar::TypeHint)
-                            // } else {
-                            //     Token::Word(other.to_string())
-                            // }
                             tokens.push(Token::Word(other.to_string()))
                         }
                     }
@@ -283,8 +250,7 @@ pub mod parser {
                 Token::Keyword(Keyword::Let | Keyword::Const | Keyword::ObjectIdent) => {
                     tokens.push(next_token);
                     if let Some(Token::Word(var_name)) = token_stream.next() {
-                        let mut chars = var_name.chars().peekable();
-                        if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
+                        if qualifies_for_var(&var_name) {
                             tokens.push(Token::Ident(var_name))
                         } else {
                             return Err(ParseError::InavlidVarName)
@@ -296,14 +262,16 @@ pub mod parser {
                 Token::OtherGrammar(OtherGrammar::TypeHint) => {
                     tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint));
                     if let Some(Token::Word(type_str)) = token_stream.next() {
-                        let mut chars = type_str.chars().peekable();
-                        if (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_')) {
+                        if qualifies_for_var(&type_str) {
                             tokens.push(Token::Type(type_str));
                         }
                     } else {
                         return Err(ParseError::InvalidType)
                     }
 
+                }
+                Token::Word(word) if qualifies_for_var(&word) => {
+                    tokens.push(Token::Ident(word))
                 }
                 a => tokens.push(a)
             }
@@ -326,17 +294,23 @@ pub mod parser {
         /// object identifier (such as a bound block name. MUST BE COMPILE TIME KNOWN)
         ObjectIdent,
         Let,
+        If,
+        Else,
     }
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum Literal {
         String(String),
         Number(f64),
+        Bool(bool),
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-    pub enum AssignmentOperator {
+    pub enum Operator {
+        // `=`
         Assign,
+        // `.`
+        Dot,
         // PlusEquals,
         // MinusEquals,
         // MulEquals,
@@ -353,6 +327,8 @@ pub mod parser {
     pub enum Token {
         ScopeBegin,
         ScopeEnd,
+        ParenBegin,
+        ParenEnd,
         /// end of line / semicolon
         EOL,
         /// Literals, such as "text" or 123.456
@@ -361,11 +337,11 @@ pub mod parser {
         Keyword(Keyword),
         /// some other grammar thing
         OtherGrammar(OtherGrammar),
-        /// a assignment operation, such as `=`
-        Assignment(AssignmentOperator),
+        /// an operation, such as `=` or `.`
+        Operator(Operator),
         /// something else
         Word(String),
-        /// a variable name
+        /// an identifer
         Ident(String),
         /// a type (as a string)
         Type(String),
