@@ -1,11 +1,14 @@
 const message: String = "Hello, World!";
 const ident msg_block = "message1";
 
-print(message);
+mindy::print(message);
 
-if true {{
+let cond: bool = false;
+// let cond2 = false;
+
+if cond {
     print(message);
     msg_block.flush_to();
-}}
+}
 
 // loop {}

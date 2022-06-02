@@ -12,13 +12,193 @@ fn main() -> Result<()> {
     let mut file = OpenOptions::new().read(true).write(false).open("test.mc")?;
     let mut raw = String::new();
     file.read_to_string(&mut raw)?;
-    let _tokens = parser::tokenize(raw)?;
+    let _ast = parser::parse(raw)?;
     Ok(())
 }
 
 pub mod parser {
-    #[derive(Debug, thiserror::Error)]
+    use crate::lexer;
+
+    #[derive(Clone, Debug, thiserror::Error)]
     pub enum ParseError {
+        #[error("Lexing failed: {0:#?}")]
+        LexerError(#[from] lexer::LexError),
+        #[error("Scoping failed: {0:#?}")]
+        ScoperError(#[from] scoped::ScoperError),
+    }
+
+    pub mod scoped {
+        use crate::lexer;
+
+        #[derive(Clone ,Debug, thiserror::Error)]
+        pub enum ScoperError {
+            #[error("An Expr cannot contain a Block")]
+            ExprContainingBlock,
+        }
+
+        /// note: does not contiain tokens `Token::EOL`, Token::ScopeBegin`, or `Token::ScopeEnd` (replaced with this)
+        ///
+        /// other note: a Expr cannot contain a Block
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum ScopedTokens {
+            // an expression, terminated by `;`
+            Expr {
+                tokens: Vec<lexer::Token>,
+            },
+            // a block, contained in `{` and `}`
+            Block {
+                inner: Vec<ScopedTokens>,
+            },
+        }
+
+        impl ScopedTokens {
+            pub fn traverse_build(&mut self, token_stream: &mut impl Iterator<Item = lexer::Token>) -> Result<(), ScoperError>  {
+                let mut current_line_tokens: Vec<lexer::Token> = vec![];
+                while let Some(token) = token_stream.next() {
+                    use lexer::Token;
+                    match token {
+                        Token::ScopeBegin => match self {
+                            Self::Block { ref mut inner } => {
+                                if !current_line_tokens.is_empty() {
+                                    inner.push(ScopedTokens::Expr { tokens: current_line_tokens });
+                                    current_line_tokens = vec![];
+                                }
+                                inner.push(ScopedTokens::Block { inner: vec![] });
+                                inner.last_mut().unwrap().traverse_build(token_stream)?;
+                            }
+                            Self::Expr { .. } => {
+                                return Err(ScoperError::ExprContainingBlock)
+                            }
+                        },
+                        Token::ScopeEnd => match self {
+                            Self::Block { ref mut inner } => {
+                                if !current_line_tokens.is_empty() {
+                                    inner.push(ScopedTokens::Expr { tokens: current_line_tokens });
+                                }
+                                return Ok(())
+                            }
+                            Self::Expr { .. } => {
+                                return Err(ScoperError::ExprContainingBlock)
+                            }
+                        },
+                        Token::EOL => match self {
+                            Self::Block { ref mut inner } => {
+                                inner.push(ScopedTokens::Expr { tokens: current_line_tokens });
+                                current_line_tokens = vec![];
+                            }
+                            Self::Expr { .. } => unreachable!()
+                        }
+                        other => {
+                            current_line_tokens.push(other);
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
+
+        pub fn scope_out(tokens: Vec<lexer::Token>) -> Result<ScopedTokens, ScoperError> {
+            let mut root = ScopedTokens::Block { inner: vec![] };
+            let mut tokens_iter = tokens.into_iter();
+            root.traverse_build(&mut tokens_iter)?;
+            Ok(root)
+        }
+    }
+
+    pub mod ast {
+        use super::{ParseError, scoped::ScopedTokens};
+        use crate::lexer;
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum AstNode {
+            Block(Block),
+            Expr(Expr),
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum IfChain {
+            If {
+                condition: Block,
+                folowing: Block,
+            },
+            ElseIf {
+                condition: Block,
+                folowing: Block,
+            },
+            Else {
+                folowing: Block,
+            }
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Argument {
+            Ident {
+                name: String,
+            },
+            BlockExpr(Block),
+            Expr(Expr),
+            Literal(lexer::Literal),
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Expr {
+            Constant {
+                typ: String,
+                name: String,
+                value: lexer::Literal,
+            },
+            ConstIdent {
+                name: String,
+                value: String,
+            },
+            Let {
+                typ: String,
+                typ_is_elided: bool,
+                name: String,
+                assignment: Block,
+            },
+            If {
+                chain: IfChain
+            },
+            Call {
+                fn_ident: String,
+                args: Vec<Argument>,
+            },
+            MethodCall {
+                calee_ident: String,
+                fn_ident: String,
+                args: Vec<Argument>,
+            }
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct Block {
+            pub subnodes: Vec<AstNode>,
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct Ast {
+            pub root: AstNode,
+        }
+
+        pub fn build_ast(_tokens: ScopedTokens) -> Result<Ast, ParseError> {
+            todo!()
+        }
+    }
+
+    pub fn parse(raw: String) -> Result<ast::Ast, ParseError> {
+        let tokens = lexer::tokenize(raw)?;
+        let scoped_tokens =  scoped::scope_out(tokens)?;
+        debug!("scoped tokens: {scoped_tokens:#?}");
+        let ast = ast::build_ast(scoped_tokens)?;
+        debug!("ast: {ast:#?}");
+        Ok(ast)
+    }
+}
+
+pub mod lexer {
+    #[derive(Clone, Debug, thiserror::Error)]
+    pub enum LexError {
         #[error("EOF while parsing string literal")]
         IncompleteStringLiteral,
         #[error("Incomplete comment expression (found single `/`)")]
@@ -47,7 +227,7 @@ pub mod parser {
         (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_'))
     }
 
-    pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, ParseError> {
+    pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
         let mut base_tokens: Vec<BaseToken> = vec![];
         let mut chars = data.chars().peekable();
         let mut current_word = String::new();
@@ -67,7 +247,7 @@ pub mod parser {
                                 }
                             }
                         } else {
-                            return Err(ParseError::IncompleteCommentExpr)
+                            return Err(LexError::IncompleteCommentExpr)
                         }
                     }
                     '\"' => {
@@ -116,7 +296,7 @@ pub mod parser {
                                     }
                                 }
                                 None => {
-                                    return Err(ParseError::IncompleteStringLiteral)
+                                    return Err(LexError::IncompleteStringLiteral)
                                 }
                             }
                         }
@@ -134,11 +314,11 @@ pub mod parser {
                                     digits.push(chars.next().unwrap());
                                     match chars.peek() {
                                         Some(num) if num.is_digit(10) => {}
-                                        Some(_) => return Err(ParseError::InvalidNumberLiteral),
+                                        Some(_) => return Err(LexError::InvalidNumberLiteral),
                                         None => break,
                                     }
                                 }
-                                Some(_) => return Err(ParseError::InvalidNumberLiteral),
+                                Some(_) => return Err(LexError::InvalidNumberLiteral),
                                 None => break,
                             }
                         }
@@ -160,7 +340,23 @@ pub mod parser {
                         }
                         base_tokens.push(BaseToken::EOL);
                     }
-                    ':'  | '=' | '(' | ')' | '{' | '}' | '.' => {
+                    ':' => {
+                        if let Some(':') = chars.peek() {
+                            chars.next();
+                            if !current_word.is_empty() {
+                                base_tokens.push(BaseToken::Word(current_word));
+                                current_word = String::new();
+                            }
+                            base_tokens.push(BaseToken::Word("::".to_string()))
+                        } else {
+                            if !current_word.is_empty() {
+                                base_tokens.push(BaseToken::Word(current_word));
+                                current_word = String::new();
+                            }
+                            base_tokens.push(BaseToken::Word(ch.to_string()))
+                        }
+                    }
+                    '=' | '(' | ')' | '{' | '}' | '.' => {
                         if !current_word.is_empty() {
                             base_tokens.push(BaseToken::Word(current_word));
                             current_word = String::new();
@@ -195,7 +391,7 @@ pub mod parser {
         Ok(base_tokens)
     }
 
-    pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, ParseError> {
+    pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
         let mut token_stream = tokens.into_iter().peekable();
         let mut tokens: Vec<Token> = vec![];
 
@@ -220,6 +416,7 @@ pub mod parser {
                         "=" => tokens.push(Token::Operator(Operator::Assign)),
                         "." => tokens.push(Token::Operator(Operator::Dot)),
                         ":" => tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint)),
+                        "::" => tokens.push(Token::Operator(Operator::PathSeperator)),
                         "(" | ")" | "{" | "}" => {
                             tokens.push(match &*word {
                                 "(" => Token::ParenBegin,
@@ -253,10 +450,10 @@ pub mod parser {
                         if qualifies_for_var(&var_name) {
                             tokens.push(Token::Ident(var_name))
                         } else {
-                            return Err(ParseError::InavlidVarName)
+                            return Err(LexError::InavlidVarName)
                         }
                     } else {
-                        return Err(ParseError::InavlidVarName)
+                        return Err(LexError::InavlidVarName)
                     }
                 }
                 Token::OtherGrammar(OtherGrammar::TypeHint) => {
@@ -266,7 +463,7 @@ pub mod parser {
                             tokens.push(Token::Type(type_str));
                         }
                     } else {
-                        return Err(ParseError::InvalidType)
+                        return Err(LexError::InvalidType)
                     }
 
                 }
@@ -280,11 +477,11 @@ pub mod parser {
         Ok(tokens)
     }
 
-    pub fn tokenize(data: String) -> Result<Vec<Token>, ParseError> {
+    pub fn tokenize(data: String) -> Result<Vec<Token>, LexError> {
         let base_tokens = base_lexer(data)?;
-        debug!("{base_tokens:#?}");
+        debug!("base tokens: {base_tokens:#?}");
         let tokens = advanced_lexer(base_tokens)?;
-        debug!("{tokens:#?}");
+        debug!("tokens: {tokens:#?}");
         Ok(tokens)
     }
 
@@ -311,6 +508,8 @@ pub mod parser {
         Assign,
         // `.`
         Dot,
+        // `::`
+        PathSeperator,
         // PlusEquals,
         // MinusEquals,
         // MulEquals,
