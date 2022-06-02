@@ -13,10 +13,9 @@ pub enum ParseError {
 
 pub fn parse(raw: String) -> Result<ast::Ast, ParseError> {
     let tokens = lexer::tokenize(raw)?;
-    let scoped_tokens =  scoped::scope_out(tokens)?;
+    let scoped_tokens = scoped::scope_out(tokens)?;
     debug!("scoped tokens: {scoped_tokens:#?}");
     let ast = ast::build_ast(scoped_tokens)?;
     debug!("ast: {ast:#?}");
     Ok(ast)
 }
-

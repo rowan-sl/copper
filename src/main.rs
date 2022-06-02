@@ -2,8 +2,7 @@
 extern crate log;
 
 pub mod parsing;
-
-use std::{io::Read, fs::OpenOptions};
+pub mod util;
 
 use anyhow::Result;
 
@@ -11,9 +10,7 @@ fn main() -> Result<()> {
     pretty_env_logger::formatted_builder()
         .filter_level(log::LevelFilter::Debug)
         .init();
-    let mut file = OpenOptions::new().read(true).write(false).open("test.mc")?;
-    let mut raw = String::new();
-    file.read_to_string(&mut raw)?;
+    let raw = util::load_text("test.mc")?;
     let _ast = parsing::parse(raw)?;
     Ok(())
 }
@@ -183,11 +180,9 @@ impl ToString for Instruction {
     fn to_string(&self) -> String {
         use Instruction::*;
         match self {
-            End {} => {
-                String::from("end")
-            }
+            End {} => String::from("end"),
 
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

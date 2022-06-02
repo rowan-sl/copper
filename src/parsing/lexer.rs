@@ -1,4 +1,3 @@
-
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum LexError {
     #[error("EOF while parsing string literal")]
@@ -7,7 +6,9 @@ pub enum LexError {
     IncompleteCommentExpr,
     #[error("Number literal terminated with an invalid charecter")]
     InvalidNumberLiteral,
-    #[error("Invalid token folowing const, const ident, or let expression (not a valid variable name)")]
+    #[error(
+        "Invalid token folowing const, const ident, or let expression (not a valid variable name)"
+    )]
     InavlidVarName,
     #[error("Invalid type name")]
     InvalidType,
@@ -21,12 +22,14 @@ pub enum BaseToken {
     EOL,
     /// any other coherent charecter string (must be alphanumeric)
     Word(String),
-
 }
 
 fn qualifies_for_var(dat: &String) -> bool {
     let mut chars = dat.chars().peekable();
-    (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_') && chars.fold(true, |acc, elem| acc && (elem.is_ascii_alphanumeric() || elem == '_'))
+    (chars.peek().unwrap().is_ascii_alphabetic() || *chars.peek().unwrap() == '_')
+        && chars.fold(true, |acc, elem| {
+            acc && (elem.is_ascii_alphanumeric() || elem == '_')
+        })
 }
 
 pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
@@ -49,7 +52,7 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
                             }
                         }
                     } else {
-                        return Err(LexError::IncompleteCommentExpr)
+                        return Err(LexError::IncompleteCommentExpr);
                     }
                 }
                 '\"' => {
@@ -77,29 +80,25 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
                                     break;
                                 }
                             }
-                            Some(sch) => {
-                                match (sch, escaped) {
-                                    ('n', true) => {
-                                        string_literal.push('\n');
-                                        escaped = false;
-                                    }
-                                    ('t', true) => {
-                                        string_literal.push('\t');
-                                        escaped = false;
-                                    }
-                                    (other, true) => {
-                                        warn!("unhandled/unnecessary escape value! (if you want more escape sequences, please open an issue)");
-                                        escaped = false;
-                                        string_literal.push(other);
-                                    }
-                                    (other, false) => {
-                                        string_literal.push(other);
-                                    }
+                            Some(sch) => match (sch, escaped) {
+                                ('n', true) => {
+                                    string_literal.push('\n');
+                                    escaped = false;
                                 }
-                            }
-                            None => {
-                                return Err(LexError::IncompleteStringLiteral)
-                            }
+                                ('t', true) => {
+                                    string_literal.push('\t');
+                                    escaped = false;
+                                }
+                                (other, true) => {
+                                    warn!("unhandled/unnecessary escape value! (if you want more escape sequences, please open an issue)");
+                                    escaped = false;
+                                    string_literal.push(other);
+                                }
+                                (other, false) => {
+                                    string_literal.push(other);
+                                }
+                            },
+                            None => return Err(LexError::IncompleteStringLiteral),
                         }
                     }
                     base_tokens.push(BaseToken::StringLiteral(string_literal));
@@ -176,7 +175,7 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
                             ';' => {
                                 break;
                             }
-                            '"' | ':'  | '=' | '(' | ')' | '{' | '}' | '.' => {
+                            '"' | ':' | '=' | '(' | ')' | '{' | '}' | '.' => {
                                 break;
                             }
                             _ => {
@@ -201,7 +200,9 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
         match next_token {
             BaseToken::EOL => tokens.push(Token::EOL),
             BaseToken::NumberLiteral(num) => tokens.push(Token::Literal(Literal::Number(num))),
-            BaseToken::StringLiteral(string) => tokens.push(Token::Literal(Literal::String(string))),
+            BaseToken::StringLiteral(string) => {
+                tokens.push(Token::Literal(Literal::String(string)))
+            }
             BaseToken::Word(word) => {
                 match &*word {
                     "const" => {
@@ -210,10 +211,10 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                                 let _ = token_stream.next();
                                 Token::Keyword(Keyword::ObjectIdent)
                             }
-                            _ => Token::Keyword(Keyword::Const)
+                            _ => Token::Keyword(Keyword::Const),
                         };
                         tokens.push(t);
-                    },
+                    }
                     "let" => tokens.push(Token::Keyword(Keyword::Let)), //TODO intigrate this into the `const` branch
                     "=" => tokens.push(Token::Operator(Operator::Assign)),
                     "." => tokens.push(Token::Operator(Operator::Dot)),
@@ -225,16 +226,14 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                             ")" => Token::ParenEnd,
                             "{" => Token::ScopeBegin,
                             "}" => Token::ScopeEnd,
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         });
                     }
                     "true" => tokens.push(Token::Literal(Literal::Bool(true))),
                     "false" => tokens.push(Token::Literal(Literal::Bool(false))),
                     "if" => tokens.push(Token::Keyword(Keyword::If)),
                     "else" => tokens.push(Token::Keyword(Keyword::Else)),
-                    other => {
-                        tokens.push(Token::Word(other.to_string()))
-                    }
+                    other => tokens.push(Token::Word(other.to_string())),
                 }
             }
         }
@@ -252,10 +251,10 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     if qualifies_for_var(&var_name) {
                         tokens.push(Token::Ident(var_name))
                     } else {
-                        return Err(LexError::InavlidVarName)
+                        return Err(LexError::InavlidVarName);
                     }
                 } else {
-                    return Err(LexError::InavlidVarName)
+                    return Err(LexError::InavlidVarName);
                 }
             }
             Token::OtherGrammar(OtherGrammar::TypeHint) => {
@@ -265,14 +264,11 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                         tokens.push(Token::Type(type_str));
                     }
                 } else {
-                    return Err(LexError::InvalidType)
+                    return Err(LexError::InvalidType);
                 }
-
             }
-            Token::Word(word) if qualifies_for_var(&word) => {
-                tokens.push(Token::Ident(word))
-            }
-            a => tokens.push(a)
+            Token::Word(word) if qualifies_for_var(&word) => tokens.push(Token::Ident(word)),
+            a => tokens.push(a),
         }
     }
 

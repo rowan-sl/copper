@@ -1,4 +1,4 @@
-use super::{ParseError, scoped::ScopedTokens};
+use super::{scoped::ScopedTokens, ParseError};
 use crate::parsing::lexer;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,24 +9,14 @@ pub enum AstNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IfChain {
-    If {
-        condition: Block,
-        folowing: Block,
-    },
-    ElseIf {
-        condition: Block,
-        folowing: Block,
-    },
-    Else {
-        folowing: Block,
-    }
+    If { condition: Block, folowing: Block },
+    ElseIf { condition: Block, folowing: Block },
+    Else { folowing: Block },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Argument {
-    Ident {
-        name: String,
-    },
+    Ident { name: String },
     BlockExpr(Block),
     Expr(Expr),
     Literal(lexer::Literal),
@@ -50,7 +40,7 @@ pub enum Expr {
         assignment: Block,
     },
     If {
-        chain: IfChain
+        chain: IfChain,
     },
     Call {
         fn_ident: String,
@@ -60,7 +50,7 @@ pub enum Expr {
         calee_ident: String,
         fn_ident: String,
         args: Vec<Argument>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
