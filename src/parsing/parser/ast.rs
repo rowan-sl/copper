@@ -1,5 +1,5 @@
 use super::scoped::ScopedTokens;
-use crate::parsing::lexer;
+use crate::parsing::{lexer, parser::scoped::GroupedTokens};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
@@ -9,8 +9,9 @@ pub enum AstNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IfChain {
-    If { condition: Block, folowing: Block },
-    ElseIf { condition: Block, folowing: Block },
+    // can be assumed that the GroupedTokens here are always Groups
+    If { condition: GroupedTokens, folowing: Block },
+    ElseIf { condition: GroupedTokens, folowing: Block },
     Else { folowing: Block },
 }
 
@@ -36,7 +37,8 @@ pub enum Expr {
     Let {
         typ: String,
         name: String,
-        assignment: Assignment,
+        /// can be assumed to always be a Group
+        assignment: GroupedTokens,
     },
     If {
         chain: IfChain,
@@ -50,15 +52,6 @@ pub enum Expr {
         fn_ident: String,
         args: Vec<Argument>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Assignment {
-    Literal(lexer::Literal),
-    OtherVariable {
-        name: String,
-    },
-    Expr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,15 +70,26 @@ pub enum BuildError {
     BlockInExpr,
     #[error("an Expr cannot contain a Expr!")]
     ExprInExpr,
+    #[error("An if statement must be folowed by a block!")]
+    IfStatementNoBlock
 }
 
 fn build_ast_block(ast: &mut AstNode, mut block_tokens: Vec<ScopedTokens>) -> Result<(), BuildError> {
+    fn parse_block(inner: Vec<ScopedTokens>) -> Result<Block, BuildError> {
+        let mut block_node = AstNode::Block(Block { subnodes: vec![] });
+        build_ast_block(&mut block_node, inner)?;
+        if let AstNode::Block(block) = block_node {
+            Ok(block)
+        } else {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+    }
+
     block_tokens.reverse(); // so that we can use .pop() more efficiently
     while let Some(st) = block_tokens.pop() {
         match st {
             ScopedTokens::Block { inner } => {
-                let mut block_node = AstNode::Block(Block { subnodes: vec![] });
-                build_ast_block(&mut block_node, inner)?;
+                let block_node = AstNode::Block(parse_block(inner)?);
                 match ast {
                     AstNode::Block(ref mut block) => {
                         block.subnodes.push(block_node);
@@ -97,46 +101,67 @@ fn build_ast_block(ast: &mut AstNode, mut block_tokens: Vec<ScopedTokens>) -> Re
             }
             ScopedTokens::Expr { tokens } => {
                 use lexer::{Keyword, Operator, OtherGrammar, Token, Literal};
+                let tokens = if let GroupedTokens::Group(tokens) = tokens {
+                    tokens
+                } else {
+                    unreachable!()
+                };
                 // all hail slice patterns
+                #[allow(unused_imports)]
+                use GroupedTokens::{Token as GTT, Group as GTG};
                 let expr: Option<Expr> = match &tokens[..] {
                     [
-                        Token::Keyword(Keyword::Const),
-                        Token::Ident(name),
-                        Token::OtherGrammar(OtherGrammar::TypeHint),
-                        Token::Type(typ),
-                        Token::Operator(Operator::Assign),
-                        Token::Literal(value)
+                        GTT(Token::Keyword(Keyword::Const)),
+                        GTT(Token::Ident(name)),
+                        GTT(Token::OtherGrammar(OtherGrammar::TypeHint)),
+                        GTT(Token::Type(typ)),
+                        GTT(Token::Operator(Operator::Assign)),
+                        GTT(Token::Literal(value))
                     ] => {
                         Some(Expr::Constant { typ: typ.clone(), name: name.clone(), value: value.clone() })
                     }
                     [
-                        Token::Keyword(Keyword::ObjectIdent),
-                        Token::Ident(name),
-                        Token::Operator(Operator::Assign),
-                        Token::Literal(Literal::String(value))
+                        GTT(Token::Keyword(Keyword::ObjectIdent)),
+                        GTT(Token::Ident(name)),
+                        GTT(Token::Operator(Operator::Assign)),
+                        GTT(Token::Literal(Literal::String(value)))
                     ] => {
                         Some(Expr::ConstIdent { name: name.clone(), value: value.clone() })
                     }
                     [
-                        Token::Keyword(Keyword::Let),
-                        Token::Ident(name),
-                        Token::OtherGrammar(OtherGrammar::TypeHint),
-                        Token::Type(typ),
-                        Token::Operator(Operator::Assign),
-                        assignment,
+                        GTT(Token::Keyword(Keyword::Let)),
+                        GTT(Token::Ident(name)),
+                        GTT(Token::OtherGrammar(OtherGrammar::TypeHint)),
+                        GTT(Token::Type(typ)),
+                        GTT(Token::Operator(Operator::Assign)),
+                        assignment @ ..,
                     ] => {
-                        match assignment.clone() {
-                            Token::Literal(lit) => {
-                                Some(Expr::Let { typ: typ.clone(), name: name.clone(), assignment: Assignment::Literal(lit) })
+                        let group = if assignment.len() == 1 {
+                            match assignment[0].clone() {
+                                GroupedTokens::Group(group) => {
+                                    GroupedTokens::Group(group)
+                                }
+                                GroupedTokens::Token(token) => {
+                                    GroupedTokens::Group(vec![GroupedTokens::Token(token)])
+                                }
                             }
-                            Token::Ident(ident) => {
-                                Some(Expr::Let { typ: typ.clone(), name: name.clone(), assignment: Assignment::OtherVariable { name: ident } })
-                            }
-                            _other => {
-                                // assigning to expressions, such as function calls
-                                todo!();
-                            }
-                        }
+                        } else {
+                            GroupedTokens::Group(assignment.to_vec())
+                        };
+                        Some(Expr::Let { typ: typ.clone(), name: name.clone(), assignment: group })
+                    }
+                    [
+                        GTT(Token::Keyword(Keyword::If)),
+                        condition @ GTG(..),
+                    ] => {
+                        let block = match block_tokens.pop() {
+                            Some(ScopedTokens::Block { inner }) => parse_block(inner)?,
+                            Some(ScopedTokens::Expr { .. }) | None => return Err(BuildError::IfStatementNoBlock),
+                        };
+                        Some(Expr::If { chain: IfChain::If {
+                            condition: condition.clone(),
+                            folowing: block,
+                        }})
                     }
                     _ => {
                         error!("no pattern for expression: {:#?}", tokens);
