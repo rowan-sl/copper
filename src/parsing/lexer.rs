@@ -194,6 +194,7 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
 }
 
 pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
+    //? first pass, parse the basic tokens
     let mut token_stream = tokens.into_iter().peekable();
     let mut tokens: Vec<Token> = vec![];
 
@@ -240,6 +241,7 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
         }
     }
 
+    //? second pass, parse things like Idents and types and stuff
     let capacity = tokens.len();
     let mut token_stream = tokens.into_iter();
     let mut tokens: Vec<Token> = Vec::with_capacity(capacity);
@@ -269,6 +271,57 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                 }
             }
             Token::Word(word) if qualifies_for_var(&word) => tokens.push(Token::Ident(word)),
+            a => tokens.push(a),
+        }
+    }
+
+    //? third pass, currently only used for paths
+    let capacity = tokens.len();
+    let mut token_stream = tokens.into_iter().peekable();
+    let mut tokens: Vec<Token> = Vec::with_capacity(capacity);
+
+    while let Some(next_token) = token_stream.next() {
+        match next_token {
+            Token::Operator(Operator::PathSeperator) => {
+                let mut path: Vec<String> = vec![];
+                let mut has_seperator: bool = true;
+                loop {
+                    match token_stream.peek() {
+                        Some(Token::Ident(name)) => {
+                            if has_seperator {
+                                path.push(name.clone());
+                                token_stream.next();
+                                has_seperator = false;
+                            } else {
+                                panic!("invalid path!")
+                            }
+                        }
+                        Some(Token::Operator(Operator::PathSeperator)) => {
+                            if has_seperator {
+                                panic!("invalid path")
+                            } else {
+                                has_seperator = true;
+                                token_stream.next();
+                            }
+                        }
+                        Some(..) => {
+                            if has_seperator {
+                                panic!("invalid path")
+                            } else {
+                                break;
+                            }
+                        }
+                        None => {
+                            if has_seperator {
+                                panic!("invalid path")
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+                tokens.push(Token::Path(path))
+            }
             a => tokens.push(a),
         }
     }
@@ -343,4 +396,6 @@ pub enum Token {
     Ident(String),
     /// a type (as a string)
     Type(String),
+    /// a path (::first_thing::second_part)
+    Path(Vec<String>),
 }
