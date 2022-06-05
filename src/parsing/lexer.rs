@@ -119,7 +119,8 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
                                     None => break,
                                 }
                             }
-                            Some(_) => return Err(LexError::InvalidNumberLiteral),
+                            // Some(_) => return Err(LexError::InvalidNumberLiteral),
+                            Some(_) => break,
                             None => break,
                         }
                     }

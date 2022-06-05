@@ -9,6 +9,8 @@ pub enum ParseError {
     LexerError(#[from] lexer::LexError),
     #[error("Scoping failed: {0:#?}")]
     ScoperError(#[from] scoped::ScoperError),
+    #[error("Building ast failed: {0:#?}")]
+    BuildAstError(#[from] ast::BuildError),
 }
 
 pub fn parse(raw: String) -> Result<ast::Ast, ParseError> {
