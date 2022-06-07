@@ -332,9 +332,9 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
 
 pub fn tokenize(data: String) -> Result<Vec<Token>, LexError> {
     let base_tokens = base_lexer(data)?;
-    debug!("base tokens: {base_tokens:#?}");
+    trace!("base tokens: {base_tokens:#?}");
     let tokens = advanced_lexer(base_tokens)?;
-    debug!("tokens: {tokens:#?}");
+    trace!("tokens: {tokens:#?}");
     Ok(tokens)
 }
 

@@ -20,7 +20,6 @@ pub enum Argument {
     Ident { name: String },
     Group(GroupedTokens),
     Literal(lexer::Literal),
-    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,7 +43,7 @@ pub enum Expr {
         chain: IfChain,
     },
     Call {
-        fn_ident: String,
+        fn_ident: Vec<String>,
         args: Vec<Argument>,
     },
 }
@@ -162,21 +161,49 @@ fn build_ast_block(ast: &mut AstNode, mut block_tokens: Vec<ScopedTokens>) -> Re
                         GTT(Token::Path(path)),
                         args @ GTG(..),
                     ] if {
+                        //TODO finish
+                        let mut is_ok = true;
                         let mut needs_sep = false;
                         match args {
                             GroupedTokens::Group(tks) => {
                                 for tk in tks {
                                     match tk {
                                         GroupedTokens::Token(Token::OtherGrammar(OtherGrammar::Seperator)) => {
-
+                                            if needs_sep {
+                                                needs_sep = false;
+                                            } else {
+                                                warn!("Unneded seperator in function args (this will become an error in the future!)");
+                                                is_ok = false;
+                                            }
+                                        }
+                                        _ => {
+                                            needs_sep = true;
                                         }
                                     }
                                 }
                             }
                             _ => unreachable!()
                         }
+                        is_ok
                     } => {
-                        None
+                        let args = match args {
+                            GTG(args) => args.clone().into_iter().filter(|x| {
+                                match x {
+                                    GroupedTokens::Token(Token::OtherGrammar(OtherGrammar::Seperator)) => false,
+                                    _ => true,
+                                }
+                            }),
+                            _ => unreachable!()
+                        }
+                            .map(|arg| {
+                                match arg {
+                                    GroupedTokens::Token(Token::Ident(ident)) => Argument::Ident { name: ident },
+                                    GroupedTokens::Token(Token::Literal(lit)) => Argument::Literal(lit),
+                                    other => Argument::Group(other)
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        Some(Expr::Call { fn_ident: path.clone(), args })
                     }
                     _ => {
                         error!("no pattern for expression: {:#?}", tokens);

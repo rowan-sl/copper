@@ -108,7 +108,7 @@ impl ScopedTokens {
 }
 
 pub fn scope_out(tokens: Vec<lexer::Token>) -> Result<ScopedTokens, ScoperError> {
-    debug!("Scoping tokens");
+    trace!("Scoping tokens");
     let mut root = ScopedTokens::Block { inner: vec![] };
     let mut tokens_iter = tokens.into_iter();
     root.traverse_build(&mut tokens_iter)?;
