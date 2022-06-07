@@ -1,4 +1,7 @@
+// Hello, World!
+
 const message: str = "Hello, World!";
+const n: num = 10.1;
 const ident msg_block = "message1";
 
 ::mindy::print(message, "\n");
