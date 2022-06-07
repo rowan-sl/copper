@@ -18,9 +18,9 @@ pub enum IfChain {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Argument {
     Ident { name: String },
-    BlockExpr(Block),
-    Expr(Expr),
+    Group(GroupedTokens),
     Literal(lexer::Literal),
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,11 +44,6 @@ pub enum Expr {
         chain: IfChain,
     },
     Call {
-        fn_ident: String,
-        args: Vec<Argument>,
-    },
-    MethodCall {
-        calee_ident: String,
         fn_ident: String,
         args: Vec<Argument>,
     },
@@ -162,6 +157,26 @@ fn build_ast_block(ast: &mut AstNode, mut block_tokens: Vec<ScopedTokens>) -> Re
                             condition: condition.clone(),
                             folowing: block,
                         }})
+                    }
+                    [
+                        GTT(Token::Path(path)),
+                        args @ GTG(..),
+                    ] if {
+                        let mut needs_sep = false;
+                        match args {
+                            GroupedTokens::Group(tks) => {
+                                for tk in tks {
+                                    match tk {
+                                        GroupedTokens::Token(Token::OtherGrammar(OtherGrammar::Seperator)) => {
+
+                                        }
+                                    }
+                                }
+                            }
+                            _ => unreachable!()
+                        }
+                    } => {
+                        None
                     }
                     _ => {
                         error!("no pattern for expression: {:#?}", tokens);

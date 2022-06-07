@@ -158,7 +158,7 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
                         base_tokens.push(BaseToken::Word(ch.to_string()))
                     }
                 }
-                '=' | '(' | ')' | '{' | '}' | '.' => {
+                '=' | '(' | ')' | '{' | '}' | '.' | ',' => {
                     if !current_word.is_empty() {
                         base_tokens.push(BaseToken::Word(current_word));
                         current_word = String::new();
@@ -176,7 +176,7 @@ pub fn base_lexer(data: String) -> Result<Vec<BaseToken>, LexError> {
                             ';' => {
                                 break;
                             }
-                            '"' | ':' | '=' | '(' | ')' | '{' | '}' | '.' => {
+                            '"' | ':' | '=' | '(' | ')' | '{' | '}' | ',' => {
                                 break;
                             }
                             _ => {
@@ -221,6 +221,7 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     "=" => tokens.push(Token::Operator(Operator::Assign)),
                     "." => tokens.push(Token::Operator(Operator::Dot)),
                     ":" => tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint)),
+                    "," => tokens.push(Token::OtherGrammar(OtherGrammar::Seperator)),
                     "::" => tokens.push(Token::Operator(Operator::PathSeperator)),
                     "(" | ")" | "{" | "}" => {
                         tokens.push(match &*word {
@@ -372,6 +373,8 @@ pub enum Operator {
 pub enum OtherGrammar {
     /// type hint `:` symbol
     TypeHint,
+    /// `,`
+    Seperator
 }
 
 #[derive(Clone, Debug, PartialEq)]
