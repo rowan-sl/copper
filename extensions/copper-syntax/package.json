@@ -1,0 +1,25 @@
+{
+    "name": "copper-syntax",
+    "displayName": "copper-syntax",
+    "description": "syntax highliting support for the copper language in VS code",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.67.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "cu",
+            "aliases": ["cu", "cu"],
+            "extensions": [".co", ".copper"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "cu",
+            "scopeName": "source.cu",
+            "path": "./syntaxes/mc.tmLanguage.json"
+        }]
+    }
+}
