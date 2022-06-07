@@ -1,0 +1,73 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "cu",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#builtin_types"
+		},
+		{
+			"include": "#items"
+		},
+		{
+			"include": "#variables"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.cu",
+					"match": "\\b(if|while|for|return|loop|let)\\b"
+				},
+				{
+					"name": "keyword.other",
+					"match": "\\b(const|ident)\\b"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.cu",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.cu",
+					"match": "\\\\."
+				}
+			]
+		},
+		"variables": {
+			"patterns": [
+				{
+					"match": "[a-zA-Z_][a-zA-Z_0-9]*",
+					"name": "variable.object.cu"
+				}
+			]
+		},
+		"builtin_types": {
+			"patterns": [
+				{
+					"name": "entity.name.type;markup.italic",
+					"match": "\\b(bool|str)\\b"
+				},
+				{
+					"name": "",
+					"match": "\\b(bool|str)\\b"
+				}
+			]
+		},
+		"other": {
+			"patterns": [{
+				"name": "meta.seperator.cu",
+				"match": "\\b(::)\\b"
+			}]
+		}
+	},
+	"scopeName": "source.cu"
+}
