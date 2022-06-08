@@ -3,8 +3,9 @@ extern crate log;
 
 pub mod parsing;
 pub mod util;
+pub mod codegen;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, fs::OpenOptions, io::Write};
 
 use anyhow::Result;
 use clap::Parser;
@@ -40,206 +41,18 @@ fn main() -> Result<()> {
     let raw = util::load_text(&args.file)?;
     info!("Compiling {} ...", args.file.display());
     let _ast = parsing::parse(raw)?;
+    info!("Generating mlog code...");
+    let mut gen = codegen::MlogEmitter::new();
+
+    gen.include(codegen::PRELUDE.to_string());
+    //* codegen goes here
+    //* codegen ends here
+    gen.include(codegen::CLEANUP.to_string());
+
+    let raw_output = gen.into_output();
+    let mut out = OpenOptions::new().write(true).create(true).open(args.out.unwrap())?;
+    out.write_all(raw_output.as_bytes())?;
+
+    info!("Done");
     Ok(())
-}
-
-// TODO convert information to a spreadsheet
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Instruction {
-    Read,
-    /*
-    class: io
-    priority: high
-    status: unimplemented
-    */
-    Write,
-    /*
-    class: io
-    priority: high
-    status: unimplemented
-    */
-    Draw,
-    /*
-    class: graphics
-    priority: mid
-    status: unimplemented
-    */
-    Print,
-    /*
-    class: io, debug
-    priority: VERY HIGH
-    status: unimplemented
-    */
-    DrawFlush,
-    /*
-    class: graphics
-    priority: mid,
-    status: unimplemented
-    */
-    PrintFlush,
-    /*
-    class: io, debug
-    priority: very high
-    status: unimplemented
-    */
-    GetLink,
-    /*
-    class: ??
-    priority: low
-    status: unimplemented
-    */
-    Controll,
-    /*
-    class: io, unit interface
-    priority: high
-    status: unimplemented
-    */
-    Radar,
-    /*
-    class: ??
-    priority: low
-    status: unimplemented
-    */
-    Sensor,
-    /*
-    class: io, unit interface
-    priority: high
-    status: unimplemented
-    */
-    Set,
-    /*
-    class: basic operation
-    priority: very very high
-    status: unimplemented
-    */
-    Operation,
-    /*
-    class: basic operation
-    priority: very very high
-    status: unimplemented
-    */
-    Wait,
-    /*
-    class: basic operation
-    priority: very very high
-    status: unimplemented
-    */
-    Lookup,
-    /*
-    class: ??
-    priority: low
-    status: unimplemented
-    */
-    PackColor,
-    /*
-    class: basic operation, graphics
-    priority: mid
-    status: unimplemented
-    */
-    End {},
-    /*
-    class: basic operation, congroll flow
-    priority: very very high
-    status: done
-
-    args: none
-    mlog rep: "end"
-    */
-    Jump {
-        addr: usize,
-        condition: JumpCondition,
-    },
-    /*
-    class: basic operation, controll flow
-    priority: very very high
-    status: in progress
-
-    args: {addr} {conditional} {value1} {value2}
-
-    mlog rep:
-    ```
-    jump 8 equal x false
-    jump 8 notEqual x false
-    jump 8 lessThan x false
-    jump 8 lessThanEq x false
-    jump 8 greaterThan x false
-    jump 8 greaterThanEq x false
-    jump 8 strictEqual x false
-    jump 8 always x false
-    draw clear 0 0 0 0 0 0
-    ```
-    */
-    UnitBind,
-    /*
-    class: unit controll
-    priority: very low
-    status: unimplemented
-    */
-    UnitControll,
-    /*
-    class: unit controll
-    priority: very low
-    status: unimplemented
-    */
-    UnitRadar,
-    /*
-    class: unit controll
-    priority: very low
-    status: unimplemented
-    */
-    UnitLocate,
-    /*
-    class: unit controll
-    priority: very low
-    status: unimplemented
-    */
-    NoOp,
-    /*
-    class: basic operation, not in mindustry
-    priority: very very high
-    status: unimplemented
-
-    args: none
-    mlog rep: does not exist in mlog
-    */
-}
-
-impl ToString for Instruction {
-    fn to_string(&self) -> String {
-        use Instruction::*;
-        match self {
-            End {} => String::from("end"),
-
-            _ => todo!(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum JumpCondition {
-    Equal,
-    NotEqual,
-    LessThan,
-    LessThanEq,
-    GreaterThan,
-    GreaterThanEq,
-    StrictEqual,
-    /// Note: this is the only one that does NOT take arguments
-    Always,
-}
-
-impl ToString for JumpCondition {
-    fn to_string(&self) -> String {
-        use JumpCondition::*;
-        match self {
-            Equal => String::from("equal"),
-            NotEqual => String::from("notEqual"),
-            LessThan => String::from("lessThan"),
-            LessThanEq => String::from("lessThanEq"),
-            GreaterThan => String::from("greaterThan"),
-            GreaterThanEq => String::from("greaterThanEq"),
-            StrictEqual => String::from("strictEqual"),
-            Always => String::from("always"),
-        }
-    }
 }
