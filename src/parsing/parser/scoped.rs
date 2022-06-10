@@ -17,8 +17,8 @@ impl GroupedTokens {
         // debug!("recursivly parsing token group {raw:#?}");
         let mut current = vec![];
         loop {
-            let next = raw.pop();// input array MUST be reversed
-            // debug!("parsing: {next:?}");
+            let next = raw.pop(); // input array MUST be reversed
+                                  // debug!("parsing: {next:?}");
             match next {
                 Some(Token::ParenBegin) => {
                     // debug!("parsing inner scope");
@@ -28,7 +28,7 @@ impl GroupedTokens {
                 }
                 Some(Token::ParenEnd) | None => {
                     // debug!("exiting inner scope");
-                    break
+                    break;
                 }
                 Some(other) => {
                     // debug!("token: {:?}", other);
@@ -41,7 +41,7 @@ impl GroupedTokens {
 
     pub fn parse(mut raw: Vec<lexer::Token>) -> Self {
         // debug!("Parsing from {raw:#?}");
-        raw.reverse();//so .pop() can be used to more efficiently remove items
+        raw.reverse(); //so .pop() can be used to more efficiently remove items
         GroupedTokens::traverse_parse(&mut raw)
     }
 }

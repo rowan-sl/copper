@@ -1,4 +1,3 @@
-
 pub const PRELUDE: &'static str = include_str!("../template/prelude.mlog");
 pub const CLEANUP: &'static str = include_str!("../template/cleanup.mlog");
 
@@ -9,9 +8,7 @@ pub struct MlogEmitter {
 
 impl MlogEmitter {
     pub const fn new() -> Self {
-        Self {
-            raw: String::new()
-        }
+        Self { raw: String::new() }
     }
 
     /// include a section of mlog code. code MUST end with a newline
@@ -30,7 +27,7 @@ impl MlogEmitter {
 
     pub fn emit(&mut self, inst: Instruction) {
         match inst {
-            Instruction::End {  } => {
+            Instruction::End {} => {
                 self.raw.push_str("end");
                 self.raw.push('\n');
             }
@@ -42,11 +39,10 @@ impl MlogEmitter {
                 self.raw.push_str("jump 24 always 0 0");
                 self.raw.push('\n');
             }
-            other => warn!("Unsuported instruction {other:#?}")
+            other => warn!("Unsuported instruction {other:#?}"),
         }
     }
 }
-
 
 // TODO convert information to a spreadsheet
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -246,4 +242,3 @@ impl ToString for JumpCondition {
         }
     }
 }
-

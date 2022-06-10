@@ -1,11 +1,12 @@
 #[macro_use]
 extern crate log;
 
+pub mod analyzer;
+pub mod codegen;
 pub mod parsing;
 pub mod util;
-pub mod codegen;
 
-use std::{path::PathBuf, fs::OpenOptions, io::Write};
+use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
@@ -32,7 +33,6 @@ fn main() -> Result<()> {
         let mut out = args.file.clone();
         out.set_extension("mlog");
         args.out = Some(out);
-
     }
     if !args.file.is_file() {
         anyhow::bail!("Input file must be a file!");
@@ -40,17 +40,27 @@ fn main() -> Result<()> {
     debug!("{args:#?}");
     let raw = util::load_text(&args.file)?;
     info!("Compiling {} ...", args.file.display());
-    let _ast = parsing::parse(raw)?;
+    let ast = parsing::parse(raw)?;
+    info!("Checking ast...");
+    analyzer::check_ast(&ast)?;
+    info!("Generating program structure...");
+    let prog = analyzer::interpret_ast(ast)?;
+    debug!("program: {:#?}", prog);
+
     info!("Generating mlog code...");
     let mut gen = codegen::MlogEmitter::new();
 
     gen.include(codegen::PRELUDE.to_string());
     //* codegen goes here
+
     //* codegen ends here
     gen.include(codegen::CLEANUP.to_string());
 
     let raw_output = gen.into_output();
-    let mut out = OpenOptions::new().write(true).create(true).open(args.out.unwrap())?;
+    let mut out = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(args.out.unwrap())?;
     out.write_all(raw_output.as_bytes())?;
 
     info!("Done");

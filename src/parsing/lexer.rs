@@ -236,6 +236,8 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     "false" => tokens.push(Token::Literal(Literal::Bool(false))),
                     "if" => tokens.push(Token::Keyword(Keyword::If)),
                     "else" => tokens.push(Token::Keyword(Keyword::Else)),
+                    "fn" => tokens.push(Token::Keyword(Keyword::Fn)),
+                    "->" => tokens.push(Token::Keyword(Keyword::SmallArrow)),
                     other => tokens.push(Token::Word(other.to_string())),
                 }
             }
@@ -346,6 +348,8 @@ pub enum Keyword {
     Let,
     If,
     Else,
+    Fn,
+    SmallArrow,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -374,7 +378,7 @@ pub enum OtherGrammar {
     /// type hint `:` symbol
     TypeHint,
     /// `,`
-    Seperator
+    Seperator,
 }
 
 #[derive(Clone, Debug, PartialEq)]

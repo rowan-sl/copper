@@ -4,11 +4,18 @@ const message: str = "Hello, World!";
 const n: num = 10.1;
 const ident msg_block = "message1";
 
-::mindy::print(message, "\n");
+fn main() {
+    ::mindy::print(message, "\n");
 
-let cond: bool = false;
-let test1: bool = cond;
+    let cond: bool = false;
+    let test1: bool = cond;
 
-if (cond) {
+    if (cond) {
+        ::mindy::flush_to(msg_block);
+    }
+}
+
+fn hello(asdf: num) {
+    ::mindy::print("Hello, World!");
     ::mindy::flush_to(msg_block);
 }
