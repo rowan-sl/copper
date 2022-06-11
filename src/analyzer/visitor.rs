@@ -2,7 +2,6 @@ use anyhow::Result;
 
 use crate::parsing::parser::ast::Expr;
 
-
 pub trait Visitor {
     fn visit_expr(&mut self, expr: Expr) -> Result<Option<Expr>>;
 }
@@ -20,7 +19,10 @@ impl<T: Iterator<Item = Result<Expr>>> VisitingIteratorExt for T {
         Self: Sized,
         V: Visitor,
     {
-        Visiting { incoming: self, visitor: vis }
+        Visiting {
+            incoming: self,
+            visitor: vis,
+        }
     }
 }
 
@@ -40,14 +42,12 @@ where
             let next = self.incoming.next()?;
             match {
                 match next {
-                    Ok(expr) => {
-                        match self.visitor.visit_expr(expr) {
-                            Ok(Some(ret)) => Some(Ok(ret)),
-                            Ok(None) => None,
-                            Err(e) => Some(Err(e)),
-                        }
-                    }
-                    Err(e) => Some(Err(e))
+                    Ok(expr) => match self.visitor.visit_expr(expr) {
+                        Ok(Some(ret)) => Some(Ok(ret)),
+                        Ok(None) => None,
+                        Err(e) => Some(Err(e)),
+                    },
+                    Err(e) => Some(Err(e)),
                 }
             } {
                 Some(r) => break Some(r),

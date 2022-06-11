@@ -4,12 +4,8 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parsing::{
-        lexer::Literal,
-        parser::ast::Expr,
-    }
+    parsing::{lexer::Literal, parser::ast::Expr},
 };
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Constant {
@@ -33,7 +29,7 @@ impl Visitor for ConstantCollector {
                     }
                 }
             }
-            other => Ok(Some(other))
+            other => Ok(Some(other)),
         }
     }
 }
@@ -46,15 +42,13 @@ pub struct CstIdentCollector(pub CstIdentMap);
 impl Visitor for CstIdentCollector {
     fn visit_expr(&mut self, expr: Expr) -> Result<Option<Expr>> {
         match expr {
-            Expr::ConstIdent { name, value } => {
-                match self.0.insert(name.clone(), value) {
-                    None => Ok(None),
-                    Some(_) => {
-                        bail!("Constant ident {} defined twice!", name);
-                    }
+            Expr::ConstIdent { name, value } => match self.0.insert(name.clone(), value) {
+                None => Ok(None),
+                Some(_) => {
+                    bail!("Constant ident {} defined twice!", name);
                 }
-            }
-            other => Ok(Some(other))
+            },
+            other => Ok(Some(other)),
         }
     }
 }

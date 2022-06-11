@@ -51,6 +51,7 @@ fn main() -> Result<()> {
     let mut gen = codegen::MlogEmitter::new();
 
     gen.include(codegen::PRELUDE.to_string());
+    gen.include(codegen::PREPARE.to_string());
     //* codegen goes here
 
     //* codegen ends here

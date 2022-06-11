@@ -20,16 +20,11 @@ print "OK\n"
 printflush message1
 wait 1
 control enabled switch1 0 0 0 0
-print "waiting for boot signal"
+print "initial boot sequence complete"
 printflush message1
 jump 29 always 0 0
 end
 sensor boot switch1 @enabled
 jump 25 strictEqual boot true
 jump 26 always 0 0
-sensor boot switch1 @enabled
-jump 29 notEqual boot true
-control enabled switch1 0 0 0 0
-print "starting"
-printflush message1
 wait 1

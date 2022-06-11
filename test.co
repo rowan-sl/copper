@@ -1,21 +1,32 @@
 // Hello, World!
 
-const message: str = "Hello, World!";
-const n: num = 10.1;
-const ident msg_block = "message1";
+// const message: str = "Hello, World!";
+// const n: num = 10.1;
+// const ident msg_block = "message1";
+
+// fn main() {
+//     ::mindy::print(message, "\n");
+
+//     let cond: bool = false;
+//     let test1: bool = cond;
+
+//     if (cond) {
+//         ::mindy::flush_to(msg_block);
+//     }
+// }
+
+// fn hello(asdf: num) {
+//     ::mindy::print("Hello, World!");
+//     ::mindy::flush_to(msg_block);
+// }
 
 fn main() {
-    ::mindy::print(message, "\n");
-
-    let cond: bool = false;
-    let test1: bool = cond;
-
-    if (cond) {
-        ::mindy::flush_to(msg_block);
-    }
+    let b: num = 5;
+    let r: num = add(10, b);
+    add(10, sub(1, 2));
 }
 
-fn hello(asdf: num) {
-    ::mindy::print("Hello, World!");
-    ::mindy::flush_to(msg_block);
-}
+// fn add(a: num, b: num) -> num {
+//     let c = a + b;
+//     return c;
+// }

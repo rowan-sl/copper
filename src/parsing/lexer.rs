@@ -223,6 +223,28 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     ":" => tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint)),
                     "," => tokens.push(Token::OtherGrammar(OtherGrammar::Seperator)),
                     "::" => tokens.push(Token::Operator(Operator::PathSeperator)),
+                    "+" | "-" | "*" | "/" | "//" | "%" | "^" | "==" | "===" | "!" | "&&" | "||" | "<" | "<=" | ">" | ">=" => {
+                        use Operator::*;
+                        tokens.push(Token::Operator(match &*word {
+                            "+" => Add,
+                            "-" => Sub,
+                            "*" => Mul,
+                            "/" => Div,
+                            "//" => FloorDiv,
+                            "%" => Rem,
+                            "^" => Pow,
+                            "==" => Eq,
+                            "===" => StrictEq,
+                            "!" => Not,
+                            "&&" => And,
+                            "||" => Or,
+                            "<" => Ltn,
+                            "<=" => LtnEq,
+                            ">" => Gtn,
+                            ">=" => GtnEq,
+                            _ => unreachable!()
+                        }));
+                    }
                     "(" | ")" | "{" | "}" => {
                         tokens.push(match &*word {
                             "(" => Token::ParenBegin,
@@ -263,8 +285,8 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     return Err(LexError::InavlidVarName);
                 }
             }
-            Token::OtherGrammar(OtherGrammar::TypeHint) => {
-                tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint));
+            tk @ Token::OtherGrammar(OtherGrammar::TypeHint) | tk @ Token::Keyword(Keyword::SmallArrow) => {
+                tokens.push(tk);
                 if let Some(Token::Word(type_str)) = token_stream.next() {
                     if qualifies_for_var(&type_str) {
                         tokens.push(Token::Type(type_str));
@@ -367,10 +389,53 @@ pub enum Operator {
     Dot,
     // `::`
     PathSeperator,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    FloorDiv,
+    Rem,
+    Pow,
+    Eq,
+    StrictEq,
+    Not,
+    And,
+    Or,
+    Ltn,
+    LtnEq,
+    Gtn,
+    GtnEq,
     // PlusEquals,
     // MinusEquals,
     // MulEquals,
     // DivEquals,
+}
+
+impl Operator {
+    /// things like mathmatical or logical
+    pub fn is_var_op(self) -> bool {
+        use Operator::*;
+        match self {
+            PathSeperator => true,
+            Add => true,
+            Sub => true,
+            Mul => true,
+            Div => true,
+            FloorDiv => true,
+            Rem => true,
+            Pow => true,
+            Eq => true,
+            StrictEq => true,
+            Not => true,
+            And => true,
+            Or => true,
+            Ltn => true,
+            LtnEq => true,
+            Gtn => true,
+            GtnEq => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

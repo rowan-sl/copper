@@ -4,13 +4,14 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parsing::parser::ast::{Expr, Block, Argument},
+    parsing::parser::ast::{Argument, Block, Expr},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawFn {
     args: Vec<Argument>,
     code: Block,
+    ret_typ: String,
 }
 
 pub type RawFnMap = HashMap<String, RawFn>; // name, value
@@ -31,15 +32,15 @@ impl Visitor for RawFnCollector {
                 self.main_fn = Some(code);
                 Ok(None)
             }
-            Expr::FnDef { ident, args, code } => {
-                match self.map.insert(ident.clone(), RawFn { args, code }) {
+            Expr::FnDef { ident, args, code, ret_typ } => {
+                match self.map.insert(ident.clone(), RawFn { args, code, ret_typ }) {
                     None => Ok(None),
                     Some(_) => {
                         bail!("Function {} defined twice!", ident);
                     }
                 }
             }
-            other => Ok(Some(other))
+            other => Ok(Some(other)),
         }
     }
 }

@@ -3,14 +3,12 @@ pub mod visitors;
 
 use anyhow::{bail, Result};
 
-use crate::parsing::{
-    parser::ast::{Ast, AstNode, Expr, self},
-};
+use crate::parsing::parser::ast::{self, Ast, AstNode, Expr};
 
 use visitor::VisitingIteratorExt;
 use visitors::{
-    constants::{ConstantMap, CstIdentMap, ConstantCollector, CstIdentCollector},
-    raw_functions::{RawFnMap, RawFnCollector},
+    constants::{ConstantCollector, ConstantMap, CstIdentCollector, CstIdentMap},
+    raw_functions::{RawFnCollector, RawFnMap},
 };
 
 /// placeholder
@@ -35,19 +33,19 @@ pub fn interpret_ast(ast: Ast) -> Result<Program> {
         AstNode::Block(b) => b,
         _ => unreachable!(),
     }
-        .subnodes
-        .into_iter()
-        .map(|n| match n {
-            AstNode::Expr(e) => Ok(e),
-            AstNode::Block(b) => bail!("Error: block in root scope: {b:#?}"),
-        })
-        .collect::<Result<Vec<Expr>>>()?
-        .into_iter()
-        .map(|e| Ok(e))
-        .visitor(&mut const_collector)
-        .visitor(&mut const_ident_collector)
-        .visitor(&mut raw_fn_collector)
-        .collect::<Result<Vec<Expr>>>()?;
+    .subnodes
+    .into_iter()
+    .map(|n| match n {
+        AstNode::Expr(e) => Ok(e),
+        AstNode::Block(b) => bail!("Error: block in root scope: {b:#?}"),
+    })
+    .collect::<Result<Vec<Expr>>>()?
+    .into_iter()
+    .map(|e| Ok(e))
+    .visitor(&mut const_collector)
+    .visitor(&mut const_ident_collector)
+    .visitor(&mut raw_fn_collector)
+    .collect::<Result<Vec<Expr>>>()?;
 
     info!("Reamining nodes: {:#?}", extra_nodes);
 

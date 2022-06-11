@@ -1,4 +1,5 @@
 pub const PRELUDE: &'static str = include_str!("../template/prelude.mlog");
+pub const PREPARE: &'static str = include_str!("../template/prepare.mlog");
 pub const CLEANUP: &'static str = include_str!("../template/cleanup.mlog");
 
 #[derive(Debug, Clone, PartialEq)]

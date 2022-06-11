@@ -8,30 +8,37 @@ wait 1
 print "Running debug assertions...\n"
 print "checking for stack memory.. "
 write 42 bank1 500
+set val null
 read val bank1 500
-jump 16 strictEqual val 42
+jump 18 strictEqual val 42
 print "ERR, press reset once fixed\n"
 print "Waiting for reset..."
 printflush message1
-jump 24 always 0 0
+control enabled switch1 0 0 0 0
+jump 26 always 0 0
 print "OK\n"
 printflush message1
 wait 1
 control enabled switch1 0 0 0 0
-print "waiting for boot signal"
+print "initial boot sequence complete"
 printflush message1
-jump 27 always 0 0
+jump 29 always 0 0
 end
 sensor boot switch1 @enabled
-jump 23 strictEqual boot true
-jump 24 always 0 0
-sensor boot switch1 @enabled
-jump 27 notEqual boot true
-control enabled switch1 0 0 0 0
-print "starting"
+jump 25 strictEqual boot true
+jump 26 always 0 0
+wait 1
+print "Running startup prodedures"
+printflush message1
+set i 0
+write 0 bank1 i
+op add i i 1
+jump 33 lessThanEq i 512
+set i null
+print "Program start"
 printflush message1
 wait 1
 print "End of program reached, Exiting"
 print "\nPress reset to run again"
 printflush message1
-jump 24 always 0 0
+jump 26 always 0 0

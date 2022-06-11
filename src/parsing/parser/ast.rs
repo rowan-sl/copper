@@ -67,7 +67,35 @@ pub enum Expr {
         ident: String,
         args: Vec<Argument>,
         code: Block,
-    }
+        ret_typ: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperVal {
+    Literal(lexer::Literal),
+    Variable(String),
+    Expression(Box<OperExpr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperExpr {
+    Add(OperVal, OperVal),
+    Sub(OperVal, OperVal),
+    Mul(OperVal, OperVal),
+    Div(OperVal, OperVal),
+    FloorDiv(OperVal, OperVal),
+    Rem(OperVal, OperVal),
+    Pow(OperVal, OperVal),
+    Eq(OperVal, OperVal),
+    StrictEq(OperVal, OperVal),
+    Not(OperVal),
+    And(OperVal, OperVal),
+    Or(OperVal, OperVal),
+    Ltn(OperVal, OperVal),
+    LtnEq(OperVal, OperVal),
+    Gtn(OperVal, OperVal),
+    GtnEq(OperVal, OperVal),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -239,36 +267,50 @@ fn build_ast_block(
                         };
                         Some(Expr::MainFn { code: block })
                     }
-                    [
-                        GTT(Token::Keyword(Keyword::Fn)),
-                        GTT(Token::Ident(ident)),
-                        GTG(args),
-                    ] if {
-                        let mut args = args.clone();
-                        loop {
-                            match &args[..] {
-                                [] => break true,
-                                [GTT(Token::Ident(..)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(..)), ..] => {
-                                    if args.len() < 3 {
-                                        break false
+                    [GTT(Token::Keyword(Keyword::Fn)), GTT(Token::Ident(ident)), GTG(args), GTT(Token::Keyword(Keyword::SmallArrow)), GTT(Token::Type(ret_typ))]
+                        if {
+                            let mut args = args.clone();
+                            loop {
+                                match &args[..] {
+                                    [GTT(Token::Ident(..)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(..)), GTT(Token::OtherGrammar(OtherGrammar::Seperator)), ..] => {
+                                        for _ in 0..4 {
+                                            args.remove(0);
+                                        }
                                     }
-                                    for _ in 0..3 { args.remove(0); }
+                                    [GTT(Token::Ident(..)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(..))] => {
+                                        for _ in 0..3 {
+                                            args.remove(0);
+                                        }
+                                        break true
+                                    }
+                                    _ => break false,
                                 }
-                                _ => break false,
                             }
-                        }
-                    } => {
+                        } =>
+                    {
                         let mut oargs = args.clone();
                         let mut parsed_args = vec![];
                         loop {
                             match &oargs[..] {
                                 [] => break,
-                                [GTT(Token::Ident(arg_ident)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(arg_typ)), ..] => {
+                                [GTT(Token::Ident(arg_ident)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(arg_typ)), GTT(Token::OtherGrammar(OtherGrammar::Seperator)), ..] =>
+                                {
                                     parsed_args.push(Argument {
                                         ident: arg_ident.clone(),
                                         typ: arg_typ.clone(),
                                     });
-                                    for _ in 0..3 { oargs.remove(0); }
+                                    for _ in 0..4 {
+                                        oargs.remove(0);
+                                    }
+                                }
+                                [GTT(Token::Ident(arg_ident)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(arg_typ))] => {
+                                    parsed_args.push(Argument {
+                                        ident: arg_ident.clone(),
+                                        typ: arg_typ.clone(),
+                                    });
+                                    for _ in 0..3 {
+                                        oargs.remove(0);
+                                    }
                                 }
                                 _ => unreachable!(),
                             }
@@ -279,7 +321,12 @@ fn build_ast_block(
                                 return Err(BuildError::FnStatementNoBlock)
                             }
                         };
-                        Some(Expr::FnDef { ident: ident.clone(), args: parsed_args, code: block })
+                        Some(Expr::FnDef {
+                            ident: ident.clone(),
+                            args: parsed_args,
+                            code: block,
+                            ret_typ: ret_typ.clone(),
+                        })
                     }
                     _ => {
                         error!("no pattern for expression: {:#?}", tokens);

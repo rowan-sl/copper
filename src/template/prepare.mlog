@@ -1,0 +1,10 @@
+print "Running startup prodedures"
+printflush message1
+set i 0
+write 0 bank1 i
+op add i i 1
+jump 33 lessThanEq i 512
+set i null
+print "Program start"
+printflush message1
+wait 1
