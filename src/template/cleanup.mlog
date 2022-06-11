@@ -1,4 +1,4 @@
 print "End of program reached, Exiting"
 print "\nPress reset to run again"
 printflush message1
-jump 24 always 0 0
+jump 26 always 0 0
