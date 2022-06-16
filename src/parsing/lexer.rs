@@ -223,7 +223,8 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     ":" => tokens.push(Token::OtherGrammar(OtherGrammar::TypeHint)),
                     "," => tokens.push(Token::OtherGrammar(OtherGrammar::Seperator)),
                     "::" => tokens.push(Token::Operator(Operator::PathSeperator)),
-                    "+" | "-" | "*" | "/" | "//" | "%" | "^" | "==" | "===" | "!" | "&&" | "||" | "<" | "<=" | ">" | ">=" => {
+                    "+" | "-" | "*" | "/" | "//" | "%" | "^" | "==" | "===" | "!" | "&&" | "||"
+                    | "<" | "<=" | ">" | ">=" => {
                         use Operator::*;
                         tokens.push(Token::Operator(match &*word {
                             "+" => Add,
@@ -242,7 +243,7 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                             "<=" => LtnEq,
                             ">" => Gtn,
                             ">=" => GtnEq,
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         }));
                     }
                     "(" | ")" | "{" | "}" => {
@@ -285,7 +286,8 @@ pub fn advanced_lexer(tokens: Vec<BaseToken>) -> Result<Vec<Token>, LexError> {
                     return Err(LexError::InavlidVarName);
                 }
             }
-            tk @ Token::OtherGrammar(OtherGrammar::TypeHint) | tk @ Token::Keyword(Keyword::SmallArrow) => {
+            tk @ Token::OtherGrammar(OtherGrammar::TypeHint)
+            | tk @ Token::Keyword(Keyword::SmallArrow) => {
                 tokens.push(tk);
                 if let Some(Token::Word(type_str)) = token_stream.next() {
                     if qualifies_for_var(&type_str) {

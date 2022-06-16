@@ -277,11 +277,12 @@ fn build_ast_block(
                                             args.remove(0);
                                         }
                                     }
-                                    [GTT(Token::Ident(..)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(..))] => {
+                                    [GTT(Token::Ident(..)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(..))] =>
+                                    {
                                         for _ in 0..3 {
                                             args.remove(0);
                                         }
-                                        break true
+                                        break true;
                                     }
                                     _ => break false,
                                 }
@@ -303,7 +304,8 @@ fn build_ast_block(
                                         oargs.remove(0);
                                     }
                                 }
-                                [GTT(Token::Ident(arg_ident)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(arg_typ))] => {
+                                [GTT(Token::Ident(arg_ident)), GTT(Token::OtherGrammar(OtherGrammar::TypeHint)), GTT(Token::Type(arg_typ))] =>
+                                {
                                     parsed_args.push(Argument {
                                         ident: arg_ident.clone(),
                                         typ: arg_typ.clone(),

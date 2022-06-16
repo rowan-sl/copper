@@ -32,8 +32,20 @@ impl Visitor for RawFnCollector {
                 self.main_fn = Some(code);
                 Ok(None)
             }
-            Expr::FnDef { ident, args, code, ret_typ } => {
-                match self.map.insert(ident.clone(), RawFn { args, code, ret_typ }) {
+            Expr::FnDef {
+                ident,
+                args,
+                code,
+                ret_typ,
+            } => {
+                match self.map.insert(
+                    ident.clone(),
+                    RawFn {
+                        args,
+                        code,
+                        ret_typ,
+                    },
+                ) {
                     None => Ok(None),
                     Some(_) => {
                         bail!("Function {} defined twice!", ident);

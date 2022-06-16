@@ -1,3 +1,4 @@
+
 // Hello, World!
 
 // const message: str = "Hello, World!";
@@ -20,11 +21,15 @@
 //     ::mindy::flush_to(msg_block);
 // }
 
-fn main() {
-    let b: num = 5;
-    let r: num = add(10, b);
-    add(10, sub(1, 2));
+fn main() -> ! {
+    // let a = ( 1 + ( 8 / 2 ) );
+    // let b: num = 5;
+    // let r: num = add(10, b);
+    // add(10, sub(1, 2));
+    return 0;
 }
+
+// + - * / %
 
 // fn add(a: num, b: num) -> num {
 //     let c = a + b;
