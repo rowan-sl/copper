@@ -14,4 +14,4 @@ this uses a fully custom lexer, parser, codegen, etc, the whole deal. This is mo
 
 ## How to use
 
-right now, you don't. its not done
+its currently unfinished, but it is a cli program, so try running it there and see what happens :shrug:
