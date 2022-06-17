@@ -1,0 +1,50 @@
+// Hello, World!
+
+// const message: str = "Hello, World!";
+// const n: num = 10.1;
+// const ident msg_block = "message1";
+
+// fn main() {
+//     ::mindy::print(message, "\n");
+
+//     let cond: bool = false;
+//     let test1: bool = cond;
+
+//     if cond {
+//         ::mindy::flush_to(msg_block);
+//     }
+// }
+
+// fn hello(asdf: num) {
+//     ::mindy::print("Hello, World!");
+//     ::mindy::flush_to(msg_block);
+// }
+
+// fn main() -> ! {
+    // TODO (overall compiler feature): for in loops
+    // let a: num = ( 1 + ( 8 / 2 ) );
+    // TODO (compiler feature): this does not work. implementation of order of operations is needed
+    // let a: num = 1 + 1 + 1;
+    // let a: num = ( 1 + 1 );
+    // let a: num = 1 + 1;
+    // let a: num = 1;
+    // let a: str = "test";
+    // let b: num = 5.0;
+    // let r: num = add(10, b);
+    // add(10, sub(1, 2));
+    // return "test";
+    // loop {
+    //     if false {
+    //         continue;
+    //     } else if true {
+    //         break;
+    //     } else {
+    //         let _: num = 0;
+    //     }
+    // }
+// }
+
+// fn add(a: num, b: num) -> num {
+//     let c: num = a + b;
+//     return c;
+// }

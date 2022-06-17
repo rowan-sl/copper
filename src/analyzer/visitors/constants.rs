@@ -4,13 +4,13 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parsing::{lexer::Literal, parser::ast::Expr},
+    parse2::{AstNode, ASTType},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Constant {
-    typ: String,
-    value: Literal,
+    typ: ASTType,
+    value: AstNode,
 }
 
 pub type ConstantMap = HashMap<String, Constant>; // name, value
@@ -19,13 +19,13 @@ pub type ConstantMap = HashMap<String, Constant>; // name, value
 pub struct ConstantCollector(pub ConstantMap);
 
 impl Visitor for ConstantCollector {
-    fn visit_expr(&mut self, expr: Expr) -> Result<Option<Expr>> {
-        match expr {
-            Expr::Constant { typ, name, value } => {
-                match self.0.insert(name.clone(), Constant { typ, value }) {
+    fn visit_node(&mut self, node: AstNode) -> Result<Option<AstNode>> {
+        match node {
+            AstNode::Const { ident, typ, value } => {
+                match self.0.insert(ident.clone(), Constant { typ, value: *value }) {
                     None => Ok(None),
                     Some(_) => {
-                        bail!("Constant {} defined twice!", name);
+                        bail!("Constant {} defined twice!", ident);
                     }
                 }
             }
@@ -40,12 +40,12 @@ pub type CstIdentMap = HashMap<String, String>; // name, value
 pub struct CstIdentCollector(pub CstIdentMap);
 
 impl Visitor for CstIdentCollector {
-    fn visit_expr(&mut self, expr: Expr) -> Result<Option<Expr>> {
-        match expr {
-            Expr::ConstIdent { name, value } => match self.0.insert(name.clone(), value) {
+    fn visit_node(&mut self, node: AstNode) -> Result<Option<AstNode>> {
+        match node {
+            AstNode::ConstIdent { ident, value } => match self.0.insert(ident.clone(), value) {
                 None => Ok(None),
                 Some(_) => {
-                    bail!("Constant ident {} defined twice!", name);
+                    bail!("Constant ident {} defined twice!", ident);
                 }
             },
             other => Ok(Some(other)),

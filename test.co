@@ -1,37 +1,10 @@
-
 // Hello, World!
 
-// const message: str = "Hello, World!";
-// const n: num = 10.1;
-// const ident msg_block = "message1";
-
-// fn main() {
-//     ::mindy::print(message, "\n");
-
-//     let cond: bool = false;
-//     let test1: bool = cond;
-
-//     if (cond) {
-//         ::mindy::flush_to(msg_block);
-//     }
-// }
-
-// fn hello(asdf: num) {
-//     ::mindy::print("Hello, World!");
-//     ::mindy::flush_to(msg_block);
-// }
+const msg: str = "Hello, World!";
+const ident out = "message1";
 
 fn main() -> ! {
-    // let a = ( 1 + ( 8 / 2 ) );
-    // let b: num = 5;
-    // let r: num = add(10, b);
-    // add(10, sub(1, 2));
-    return 0;
+    println(msg);
+    printflush(out);
+    loop {}
 }
-
-// + - * / %
-
-// fn add(a: num, b: num) -> num {
-//     let c = a + b;
-//     return c;
-// }

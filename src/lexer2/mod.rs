@@ -76,8 +76,12 @@ fn first_string_literal(
     let mut string_literal: String = String::new();
     let mut escaped = false;
     loop {
-        match borrow_n(src, 1) {
-            Some("\\") => {
+        let s = match take_n(src, 1) {
+            Some(s) => s,
+            None => break (loc, Err(FindStrLitErr::IncompleteStringLiteral)),
+        };
+        match s.as_str() {
+            "\\" => {
                 loc.ch += 1;
                 if escaped {
                     // it is being escaped, so put it in as a literal value reset escaped
@@ -88,7 +92,7 @@ fn first_string_literal(
                     escaped = true
                 }
             }
-            Some("\"") => {
+            "\"" => {
                 loc.ch += 1;
                 if escaped {
                     // odd number of \ so it IS being escaped
@@ -98,7 +102,7 @@ fn first_string_literal(
                     break (loc, Ok(string_literal));
                 }
             }
-            Some(sch) => match (sch, escaped) {
+            sch => match (sch, escaped) {
                 ("n", true) => {
                     loc.ch += 1;
                     string_literal.push('\n');
@@ -131,7 +135,6 @@ fn first_string_literal(
                     string_literal.push_str(other);
                 }
             },
-            None => break (loc, Err(FindStrLitErr::IncompleteStringLiteral)),
         }
     }
 }
@@ -226,6 +229,7 @@ pub fn base_lex<T: Debug + Clone + PartialEq + 'static>(
                 continue 'lex;
             }
             Some("\"") => {
+                // info!("parsing str literal");
                 let _ = take_n(&mut data, 1);
                 let (new_loc, lit) = match first_string_literal(&mut data, loc) {
                     (new_loc, Ok(lit)) => (new_loc, lit),
@@ -238,6 +242,7 @@ pub fn base_lex<T: Debug + Clone + PartialEq + 'static>(
                         }
                     },
                 };
+                // info!("done parsing");
                 tokens.push(BaseToken {
                     val: BaseTokenVal::StrLiteral(lit),
                     loc,

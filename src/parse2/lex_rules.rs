@@ -26,6 +26,8 @@ pub fn rules() -> Vec<Rule<Token>> {
         rule!(Token::ScopeClose, r"^\}$", 1),
         rule!(Token::Fn, r"^fn$", 2),
         rule!(Token::Let, r"^let$", 3),
+        rule!(Token::Const, r"^const$", 5),
+        rule!(Token::ConstIdent, r"^ident$", 5),
         rule!(Token::OpAssign, r"^=$", 1),
         rule!(Token::Math(MathOp::Add), r"^\+$", 1),
         rule!(Token::Math(MathOp::Sub), r"^-$", 1),
@@ -35,6 +37,14 @@ pub fn rules() -> Vec<Rule<Token>> {
         rule!(Token::TypeHint, r"^:$", 1),
         rule!(Token::Comma, r"^,$", 1),
         rule!(Token::Return, r"^(return)$", 6),
+        rule!(Token::Break, r"^(break)$", 5),
+        rule!(Token::Continue, r"^(continue)$", 8),
+        rule!(Token::Loop, r"^(loop)$", 4),
+        rule!(Token::While, r"^(while)$", 5),
+        rule!(Token::If, r"^(if)$", 2),
+        rule!(Token::Else, r"^(else)$", 4),
+        rule!(Token::BoolLiteral(true), r"^(true)$", 4),
+        rule!(Token::BoolLiteral(false), r"^(false)$", 5),
     ]
     .into()
 }

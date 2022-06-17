@@ -4,14 +4,14 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parsing::parser::ast::{Argument, Block, Expr},
+    parse2::{FunctionArguments, AstBlock, ASTType, AstNode},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawFn {
-    args: Vec<Argument>,
-    code: Block,
-    ret_typ: String,
+    args: Vec<FunctionArguments>,
+    code: AstBlock,
+    ret_typ: ASTType,
 }
 
 pub type RawFnMap = HashMap<String, RawFn>; // name, value
@@ -19,36 +19,23 @@ pub type RawFnMap = HashMap<String, RawFn>; // name, value
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RawFnCollector {
     pub map: RawFnMap,
-    pub main_fn: Option<Block>,
 }
 
 impl Visitor for RawFnCollector {
-    fn visit_expr(&mut self, expr: Expr) -> Result<Option<Expr>> {
-        match expr {
-            Expr::MainFn { code } => {
-                if self.main_fn.is_some() {
-                    bail!("Multiple main functions??? what am I supposed to do with these!")
-                }
-                self.main_fn = Some(code);
-                Ok(None)
-            }
-            Expr::FnDef {
-                ident,
-                args,
-                code,
-                ret_typ,
-            } => {
+    fn visit_node(&mut self, node: AstNode) -> Result<Option<AstNode>> {
+        match node {
+            AstNode::FunctionDef { name, args, ret_typ, code } => {
                 match self.map.insert(
-                    ident.clone(),
+                    name.clone(),
                     RawFn {
                         args,
-                        code,
+                        code: code.unwrap(),
                         ret_typ,
                     },
                 ) {
                     None => Ok(None),
                     Some(_) => {
-                        bail!("Function {} defined twice!", ident);
+                        bail!("Function {} defined twice!", name);
                     }
                 }
             }

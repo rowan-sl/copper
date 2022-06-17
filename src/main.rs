@@ -5,11 +5,11 @@
 #[macro_use]
 extern crate log;
 
+//TODO code in this modlue is broken, works off of the old AST system
 pub mod analyzer;
 pub mod codegen;
 pub mod lexer2;
 pub mod parse2;
-pub mod parsing;
 pub mod util;
 
 use std::{fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf};
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
         for tk in &tokens {
             write!(dbgd, "{:>5}:{:<3} - {:?}\n", tk.loc.line, tk.loc.ch, tk.val).unwrap();
         }
-        info!("Lexed tokens:\n{}", dbgd);
+        debug!("Lexed tokens:\n{}", dbgd);
     }
 
     debug!("Scoping tokens");
@@ -77,22 +77,19 @@ fn main() -> Result<()> {
 
     if args.flags.contains(&Flag::ShowScoped) {
         //TODO nice printing like the lexed token debugging
-        info!("Scoped tokens:\n{:#?}", scoped);
+        debug!("Scoped tokens:\n{:#?}", scoped);
     }
 
     debug!("Parsing AST");
     let ast = parse2::build_ast(scoped)?;
 
     if args.flags.contains(&Flag::ShowAst) {
-        info!("AST:\n{ast:#?}");
+        debug!("AST:\n{ast:#?}");
     }
 
-    // let ast = parsing::parse(raw)?;
-    // info!("Checking ast...");
-    // analyzer::check_ast(&ast)?;
-    // info!("Generating program structure...");
-    // let prog = analyzer::interpret_ast(ast)?;
-    // debug!("program: {:#?}", prog);
+    info!("Generating program structure...");
+    let prog = analyzer::interpret_ast(ast)?;
+    debug!("program: {:#?}", prog);
 
     // info!("Generating mlog code...");
     // let mut gen = codegen::MlogEmitter::new();
