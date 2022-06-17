@@ -4,14 +4,14 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parse2::{FunctionArguments, AstBlock, ASTType, AstNode},
+    parse2::{ASTType, AstBlock, AstNode, FunctionArguments},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawFn {
-    args: Vec<FunctionArguments>,
-    code: AstBlock,
-    ret_typ: ASTType,
+    pub args: Vec<FunctionArguments>,
+    pub code: AstBlock,
+    pub ret_typ: ASTType,
 }
 
 pub type RawFnMap = HashMap<String, RawFn>; // name, value
@@ -24,7 +24,12 @@ pub struct RawFnCollector {
 impl Visitor for RawFnCollector {
     fn visit_node(&mut self, node: AstNode) -> Result<Option<AstNode>> {
         match node {
-            AstNode::FunctionDef { name, args, ret_typ, code } => {
+            AstNode::FunctionDef {
+                name,
+                args,
+                ret_typ,
+                code,
+            } => {
                 match self.map.insert(
                     name.clone(),
                     RawFn {

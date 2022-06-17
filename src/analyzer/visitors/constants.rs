@@ -4,13 +4,13 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parse2::{AstNode, ASTType},
+    parse2::{ASTType, AstNode},
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Constant {
-    typ: ASTType,
-    value: AstNode,
+    pub typ: ASTType,
+    pub value: AstNode,
 }
 
 pub type ConstantMap = HashMap<String, Constant>; // name, value
@@ -22,7 +22,10 @@ impl Visitor for ConstantCollector {
     fn visit_node(&mut self, node: AstNode) -> Result<Option<AstNode>> {
         match node {
             AstNode::Const { ident, typ, value } => {
-                match self.0.insert(ident.clone(), Constant { typ, value: *value }) {
+                match self
+                    .0
+                    .insert(ident.clone(), Constant { typ, value: *value })
+                {
                     None => Ok(None),
                     Some(_) => {
                         bail!("Constant {} defined twice!", ident);

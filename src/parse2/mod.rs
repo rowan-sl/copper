@@ -1,6 +1,8 @@
 pub mod lex_rules;
 pub mod scoped;
 
+use crate::util::TmpVarAllocator;
+
 use self::scoped::Tokens;
 pub use lex_rules::rules;
 
@@ -239,9 +241,71 @@ pub enum AstNode {
     StrLiteral(String),
     BoolLiteral(bool),
     Ident(String),
+    //* not emitted directly, but rather through simplification
+    SimplifiedGroup {
+        inner: AstGroup,
+    },
+    /// creates a temporary binding
+    BindTmp {
+        local_id: u64,
+        value: Box<AstNode>,
+    },
+    /// uses a temprary binding
+    TmpBinding {
+        local_id: u64,
+    }
 }
 
 impl AstNode {
+    fn traverse_simplify_math(self, output_binding: u64, tmp_alloc: &mut TmpVarAllocator, output: &mut Vec<AstNode>) {
+        match self {
+            AstNode::Math { left, oper, right } if !(left.is_simple() && right.is_simple()) => {
+                let left = if left.is_simple() {
+                    *left
+                } else {
+                    let local_id = tmp_alloc.next();
+                    left.traverse_simplify_math(local_id, tmp_alloc, output);
+                    AstNode::TmpBinding { local_id }
+                };
+                let right = if right.is_simple() {
+                    *right
+                } else {
+                    let local_id = tmp_alloc.next();
+                    right.traverse_simplify_math(local_id, tmp_alloc, output);
+                    AstNode::TmpBinding { local_id }
+                };
+                output.push(AstNode::BindTmp { local_id: output_binding, value: Box::new(AstNode::Math { left: Box::new(left), oper, right: Box::new(right) })});
+            }
+            other => {
+                output.push(AstNode::BindTmp { local_id: output_binding, value: Box::new(other) });
+            },
+        }
+    }
+
+    // pub fn simplify(self) -> Vec<AstNode> {
+
+    // }
+
+    pub fn is_simple(&self) -> bool {
+        match self {
+            AstNode::NumLiteral(..) |
+            AstNode::StrLiteral(..) |
+            AstNode::BoolLiteral(..) |
+            AstNode::Ident(..) => {
+                true
+            }
+            _ => false
+        }
+    }
+
+    pub fn is_math(&self) -> bool {
+        if let AstNode::Math { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
     fn needs_trailing_block(&self) -> bool {
         if let AstNode::FunctionDef { .. }
         | AstNode::Loop { .. }
@@ -343,34 +407,49 @@ impl AstNode {
                             BaseTokenVal::Semi => unreachable!(),
                         },
                     },
-                    _ => match &inner[..] {
-                        //* math things
-                        [left, Tokens::Token(BaseToken {
-                            val: BaseTokenVal::Token(Token::Math(op)),
-                            ..
-                        }), right] => {
-                            let left = Box::new(AstNode::parse(Tokens::Group(vec![left.clone()]))?);
-                            let right =
-                                Box::new(AstNode::parse(Tokens::Group(vec![right.clone()]))?);
-                            Ok(AstNode::Math {
-                                left,
-                                oper: op.clone(),
-                                right,
-                            })
+                    _ => {
+
+                        match &inner[..] {
+                            // //* math things
+                            // [left, Tokens::Token(BaseToken {
+                            //     val: BaseTokenVal::Token(Token::Math(op)),
+                            //     ..
+                            // }), right] => {
+                            //     let left = Box::new(AstNode::parse(Tokens::Group(vec![left.clone()]))?);
+                            //     let right =
+                            //         Box::new(AstNode::parse(Tokens::Group(vec![right.clone()]))?);
+                            //     Ok(AstNode::Math {
+                            //         left,
+                            //         oper: op.clone(),
+                            //         right,
+                            //     })
+                            // }
+                            //* function calls (duplicate exists in the Tokens::Expr branch, EDIT BOLTH IF ONE CHANGES)
+                            [Tokens::Token(BaseToken {
+                                val: BaseTokenVal::Ident(name),
+                                ..
+                            }), Tokens::Group(raw_args)] => {
+                                let args = CallArguments::parse(raw_args)?;
+                                Ok(AstNode::FunctionCall {
+                                    name: name.clone(),
+                                    args,
+                                })
+                            }
+                            _ => {
+                                let parts = inner.split_inclusive(|e| {
+                                    match e {
+                                        Tokens::Token(BaseToken {
+                                            val: BaseTokenVal::Token(Token::Math(..)),
+                                            ..
+                                        }) => true,
+                                        _ => false,
+                                    }
+                                }).collect::<Vec<_>>();
+                                // todo!("unhandled group expression {inner:?}")
+                                todo!()
+                            },
                         }
-                        //* function calls (duplicate exists in the Tokens::Expr branch, EDIT BOLTH IF ONE CHANGES)
-                        [Tokens::Token(BaseToken {
-                            val: BaseTokenVal::Ident(name),
-                            ..
-                        }), Tokens::Group(raw_args)] => {
-                            let args = CallArguments::parse(raw_args)?;
-                            Ok(AstNode::FunctionCall {
-                                name: name.clone(),
-                                args,
-                            })
-                        }
-                        _ => todo!("unhandled group expression {inner:?}"),
-                    },
+                    }
                 }
             }
             Tokens::Expr(inner) => match &inner[..] {
@@ -503,12 +582,10 @@ impl AstNode {
                 }), Tokens::Token(BaseToken {
                     val: BaseTokenVal::StrLiteral(value),
                     ..
-                })] => {
-                    Ok(AstNode::ConstIdent {
-                        ident: ident.clone(),
-                        value: value.clone(),
-                    })
-                }
+                })] => Ok(AstNode::ConstIdent {
+                    ident: ident.clone(),
+                    value: value.clone(),
+                }),
                 //* loop statement
                 [Tokens::Token(BaseToken {
                     val: BaseTokenVal::Token(Token::Loop),

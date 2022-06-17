@@ -88,8 +88,11 @@ fn main() -> Result<()> {
     }
 
     info!("Generating program structure...");
-    let prog = analyzer::interpret_ast(ast)?;
+    let mut prog = analyzer::interpret_ast(ast)?;
     debug!("program: {:#?}", prog);
+
+    let main_fn_code = prog.raw_functions.remove(&"main".to_string()).unwrap();
+    analyzer::walk::walk_controll_flow(main_fn_code.code,  &prog.raw_functions, &prog.global_const, &prog.const_idents);
 
     // info!("Generating mlog code...");
     // let mut gen = codegen::MlogEmitter::new();
