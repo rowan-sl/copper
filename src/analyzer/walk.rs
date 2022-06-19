@@ -16,23 +16,15 @@ pub fn walk_controll_flow(
 ) {
     let mut locals: HashMap<String, Local> = HashMap::new();
 
+    // let node = match code.remove(0) {
+    //     AstNode::Let { ident: _, typ: _, value } => value,
+    //     _ => panic!("e")
+    // };
+
     // let mut alloc = TmpVarAllocator::new();
     // let return_binding = alloc.next();
     // let mut output = vec![];
-    // AstNode::Math {
-    //     left: Box::new(AstNode::NumLiteral(
-    //         1.0,
-    //     )),
-    //     oper: MathOp::Add,
-    //     right: Box::new(AstNode::Math {
-    //         left: Box::new(AstNode::NumLiteral(
-    //             2.0,
-    //         )),
-    //         oper: MathOp::Div,
-    //         right: Box::new(AstNode::NumLiteral(
-    //             2.0,
-    //         )),
-    //     }),
-    // }.traverse_simplify(return_binding, &mut alloc, &mut output);
+    // node.traverse_simplify_group(return_binding, &mut alloc, &mut output);
     // info!("simplified: {:#?}", output);
+    info!("Simplified main fn: {:#?}", AstNode::Block { inner: code }.simplify());
 }

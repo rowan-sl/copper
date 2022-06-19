@@ -4,11 +4,11 @@ const msg: str = "Hello, World!";
 const ident out = "message1";
 
 fn main() -> ! {
-    println(msg);
-    printflush(out);
-    // let c: num = (1 + (2 * one((1 + 1) / 2)));
-    let a: num = (1 + one());
+    // println(msg);
+    // printflush(out);
+    let c: num = (1 + (2 * one((1 + 1) / 2)));
+    // let a: num = (1 + one());
     // let b: num = (one() + 1);
     // let c: num = (one() + one());
-    loop {}
+    // loop {}
 }
