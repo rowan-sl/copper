@@ -2,7 +2,7 @@ use regex::Regex;
 
 use crate::{
     lexer2::Rule,
-    parse2::{MathOp, Token},
+    parse2::{Op, Token},
 };
 
 macro_rules! rule {
@@ -28,12 +28,19 @@ pub fn rules() -> Vec<Rule<Token>> {
         rule!(Token::Let, r"^let$", 3),
         rule!(Token::Const, r"^const$", 5),
         rule!(Token::ConstIdent, r"^ident$", 5),
+        rule!(Token::Op(Op::Add), r"^\+$", 1),
+        rule!(Token::Op(Op::Sub), r"^-$", 1),
+        rule!(Token::Op(Op::Mul), r"^\*$", 1),
+        rule!(Token::Op(Op::Div), r"^/$", 1),
+        rule!(Token::Op(Op::Rem), r"^%$", 1),
+        rule!(Token::Op(Op::Eq), r"^==$", 2),
+        rule!(Token::Op(Op::GtnEq), r"^>=$", 2),
+        rule!(Token::Op(Op::LtnEq), r"^<=$", 2),
+        rule!(Token::Op(Op::Gtn), r"^>$", 1),
+        rule!(Token::Op(Op::Ltn), r"^<$", 1),
+        rule!(Token::Op(Op::And), r"^&&$", 2),
+        rule!(Token::Op(Op::Or), r"^\|\|$", 2),
         rule!(Token::OpAssign, r"^=$", 1),
-        rule!(Token::Math(MathOp::Add), r"^\+$", 1),
-        rule!(Token::Math(MathOp::Sub), r"^-$", 1),
-        rule!(Token::Math(MathOp::Mul), r"^\*$", 1),
-        rule!(Token::Math(MathOp::Div), r"^/$", 1),
-        rule!(Token::Math(MathOp::Rem), r"^%$", 1),
         rule!(Token::TypeHint, r"^:$", 1),
         rule!(Token::Comma, r"^,$", 1),
         rule!(Token::Return, r"^(return)$", 6),

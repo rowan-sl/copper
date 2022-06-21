@@ -1,0 +1,86 @@
+# examples of things for use in codegen
+# @ident = line identifier define
+# $ident = line identifier reference
+
+
+# if statement (this is if, else if, else)
+# section for evaluating cond 1
+set cond false
+# jumps
+jump $c1 strictEqual cond true
+jump $c2ev always null null
+# if cond == true (if)
+@c1 print "1st branch, c1 = 1, c2=?"
+# jumps
+jump $end always null null
+# section for evaluating cond 2
+@c2ev set cond true
+# jumps
+jump $c2 strictEqual cond true
+jump $c3 always null null
+# if cond (second) = true (else if)
+@c2 print "2nd branch, c1=0, c2=1"
+jump $end always null null
+# otherwise (else)
+@c3 print "3rd branch, c1=0, c2=0"
+# code afterwards
+@end printflush message1
+
+
+# function call & return
+# NOTE: this does not handle the passing of arguments or return values
+
+# OTHER NOTE: RECURSION CANNOT HAPPEN (because of same named variables being set multiple times with recursion)
+#     unless: all registers are saved TO THE STACK before a call (??)
+
+# function call:
+# configure the stack ptr (LEAVE OUT IN REAL PROGRAMS, but make shure that it is set to zero by default
+write 0 bank1 0
+# function call
+set jmp_addr <x> # address of the function to jump to
+set retaddr $after
+# read & increment the stack pointer
+read sp bank1 0
+op add sp sp 1
+# write the return address @ new stack ptr
+write retaddr bank1 sp
+# write the new stack ptr to address 0 in the bank
+write sp bank1 0
+# the actuall jump
+set @counter jmp_addr
+# noop (this is what happens when the function is returned from)
+@after wait 0
+
+# function return:
+# read the stack ptr
+read sp bank1 0
+# read teh address to return to
+read ret_addr bank1 sp
+# write a noticable value to the stack where the prev value was, so if anything strange happens you can tell
+write 123456789 bank1 sp
+# decrement the stack ptr
+op sub sp sp 1
+# write the new stack ptr to addr 0 in the bank
+write sp bank1 0
+# perform the jump
+set @counter ret_addr
+
+
+# Reading and writing to `Flash Memory Bank v0`
+
+# Writing:
+write <addr> cell1 0  # addr in bank to write to
+write <value> cell1 1 # value to write
+write 1 cell1 2
+write 0 cell1 3
+@done_r read {done} cell1 3       # replace {done} with some variable name
+jump $done_r notEqual {done} true # see ^
+
+# Reading
+write <addr> cell1 0 # addr to read from
+write 0 cell1 2
+write 0 cell1 3
+@done_w read {done} cell1 3       # replace {done} with some variable name
+jump $done_w notEqual {done} true # see ^
+read {output} cell1 4 # {output}: variable binding for the value returned
+

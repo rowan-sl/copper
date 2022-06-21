@@ -37,34 +37,162 @@ impl MlogEmitter {
                 self.raw.push('\n');
             }
             Instruction::WaitForReset => {
-                self.raw.push_str("jump 24 always 0 0");
+                self.raw.push_str("jump 26 always 0 0");
                 self.raw.push('\n');
+            }
+            Instruction::Read {
+                out_var,
+                bank_id,
+                addr,
+            } => {
+                self.raw
+                    .push_str(&format!("read {out_var} {bank_id} {addr}\n"));
+            }
+            Instruction::Write {
+                in_var,
+                bank_id,
+                addr,
+            } => {
+                self.raw
+                    .push_str(&format!("write {in_var} {bank_id} {addr}\n"));
             }
             other => warn!("Unsuported instruction {other:#?}"),
         }
     }
 }
 
+/// Note: for all of these, the input can be literals or variables
+///
+/// for colors, types are `int` | `ident`
+///
+/// for positions/degrees, values can be `int` | `float` | `ident`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum DrawType {
+    /// clears the display with a spacific color
+    ///
+    /// draw clear <r> <g> <b> (extra): 0 0 0
+    Clear { r: String, g: String, b: String },
+    /// Sets color for next drawing operations
+    ///
+    /// draw color <r> <g> <b> <a> (extra): 0 0
+    SetColor {
+        r: String,
+        g: String,
+        b: String,
+        a: String,
+    },
+    /// The same as SetColor, but uses packed colors
+    ///
+    /// Packed color literals are written as hex codes with the % prefix, ex `%ff0000` would be red
+    ///
+    /// draw col <color> (extra): 0 0 0 0 0
+    SetColorPacked { h: String },
+    /// Sets line width for other draw instructions
+    ///
+    /// draw stroke <width> (extra): 0 0 0 0 0
+    SetLineWidth { width: String },
+    /// Draws a line from (x1, y1) to (x2, y2)
+    ///
+    /// draw line <x> <y> <x2> <y2> (extra): 0 0
+    DrawLine {
+        x1: String,
+        y1: String,
+        x2: String,
+        y2: String,
+    },
+    /// Draws a rectangle with the bottom left corner at (x, y) and with a size of `width` and `height`
+    ///
+    /// draw rect <x> <y> <w> <h> (extra): 0 0
+    DrawRect {
+        x: String,
+        y: String,
+        w: String,
+        h: String,
+    },
+    /// Draws the outline of a rectangle
+    ///
+    /// draw lineRect <x> <y> <w> <h> (extra): 0 0
+    DrawOutlineRect {
+        x: String,
+        y: String,
+        w: String,
+        h: String,
+    },
+    /// Draws a regular polygon at (x, y) with s sides, radius ra, and rotation ro
+    ///
+    /// draw poly <x> <y> <s> <ra> <ro> (extra): 0
+    DrawRegularPolygon {
+        x: String,
+        y: String,
+        s: String,
+        ra: String,
+        ro: String,
+    },
+    /// Draws the outline of a regular polygon at (x, y) with s sides, radius ra, and rotation ro
+    ///
+    /// draw poly <x> <y> <s> <ra> <ro> (extra): 0
+    DrawOutlineRegularPolygon {
+        x: String,
+        y: String,
+        s: String,
+        ra: String,
+        ro: String,
+    },
+    /// Draws a triangle
+    ///
+    /// draw triangle x y x2 y2 x3 y3
+    DrawTriangle {
+        x1: String,
+        y1: String,
+        x2: String,
+        y2: String,
+        x3: String,
+        y3: String,
+    },
+    /// Draws an image (must be an ingame thing, use the constant, eg `@router` to reference it)
+    ///
+    /// s = size, r = rotation
+    ///
+    /// draw image x y @copper s r (extra): 0
+    DrawImage {
+        x: String,
+        y: String,
+        id: String,
+        s: String,
+        r: String,
+    },
+}
+
 // TODO convert information to a spreadsheet
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Instruction {
-    Read,
+    Read {
+        out_var: String,
+        bank_id: String,
+        addr: usize,
+    },
     /*
     class: io
     priority: high
-    status: unimplemented
+    status: done
+    mlog rep: `read <out_var> <mem_bank_id (ex: cell1)> <addr (max is 63 for cells and 511 for banks (?))>`
     */
-    Write,
+    Write {
+        in_var: String,
+        bank_id: String,
+        addr: usize,
+    },
     /*
     class: io
     priority: high
-    status: unimplemented
+    status: done
+    mlog rep `write <in_var> <mem_bank_id (ex: cell1)> <addr (max is 63 for cells and 511 for banks (?))>`
     */
-    Draw,
+    Draw(DrawType),
     /*
     class: graphics
     priority: mid
-    status: unimplemented
+    status: partially implemented, no generation for the final instr tho
     */
     Print,
     /*

@@ -9,10 +9,11 @@ extern crate log;
 pub mod analyzer;
 pub mod codegen;
 pub mod lexer2;
+pub mod lir;
 pub mod parse2;
 pub mod util;
 
-use std::{fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf};
+use std::{fmt::Write as _,  /* fs::OpenOptions, io::Write as _, */ path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
@@ -92,7 +93,13 @@ fn main() -> Result<()> {
     debug!("program: {:#?}", prog);
 
     let main_fn_code = prog.raw_functions.remove(&"main".to_string()).unwrap();
-    analyzer::walk::walk_controll_flow(main_fn_code.code,  &prog.raw_functions, &prog.global_const, &prog.const_idents);
+    analyzer::walk::walk_controll_flow(
+        "main".to_string(),
+        main_fn_code.code,
+        &prog.raw_functions,
+        &prog.global_const,
+        &prog.const_idents,
+    );
 
     // info!("Generating mlog code...");
     // let mut gen = codegen::MlogEmitter::new();

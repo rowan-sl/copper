@@ -1,7 +1,7 @@
 pub mod lex_rules;
 pub mod scoped;
 
-use crate::util::TmpVarAllocator;
+use crate::{lir::ValueExpr, util::TmpVarAllocator};
 
 use self::scoped::Tokens;
 pub use lex_rules::rules;
@@ -32,17 +32,27 @@ pub enum Token {
     OpAssign,
     NullT,  // `null`
     NeverT, // `!`
-    Math(MathOp),
+    Op(Op),
     BoolLiteral(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MathOp {
+pub enum Op {
     Add,
     Sub,
     Div,
     Mul,
     Rem,
+    Eq,
+    Gtn,
+    Ltn,
+    GtnEq,
+    LtnEq,
+    /// logical and
+    And,
+    /// logical or
+    Or,
+    // Not,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -122,13 +132,16 @@ impl FunctionArguments {
                 _ => return None,
             }
         }
+        if let State::NeedsComma { ident, typ } = state {
+            args.push(FunctionArguments { ident, typ });
+        }
         Some(args)
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallArguments {
-    args: AstNode,
+    pub args: AstNode,
 }
 
 impl CallArguments {
@@ -200,6 +213,13 @@ pub enum AstNode {
         typ: ASTType,
         value: Box<AstNode>,
     },
+    /// a = something;
+    ///
+    /// does not create a binding, only updates it
+    Set {
+        ident: String,
+        value: Box<AstNode>,
+    },
     Const {
         ident: String,
         typ: ASTType,
@@ -209,9 +229,9 @@ pub enum AstNode {
         ident: String,
         value: String,
     },
-    Math {
+    Op {
         left: Box<AstNode>,
-        oper: MathOp,
+        oper: Op,
         right: Box<AstNode>,
     },
     Loop {
@@ -253,14 +273,19 @@ pub enum AstNode {
     /// uses a temprary binding
     TmpBinding {
         local_id: u64,
-    }
+    },
 }
 
 impl AstNode {
-    /// simplify the nodes AstNode::Math and AstNode::FunctionCall. does not do any work on other nodes, **even if they contain unsimplified nodes**
-    pub fn traverse_simplify_group(self, output_binding: u64, tmp_alloc: &mut TmpVarAllocator, output: &mut Vec<AstNode>) {
+    /// simplify the nodes AstNode::Op and AstNode::FunctionCall. does not do any work on other nodes, **even if they contain unsimplified nodes**
+    pub fn traverse_simplify_group(
+        self,
+        output_binding: u64,
+        tmp_alloc: &mut TmpVarAllocator,
+        output: &mut Vec<AstNode>,
+    ) {
         match self {
-            AstNode::Math { left, oper, right } => {
+            AstNode::Op { left, oper, right } => {
                 let left = if left.is_simple() {
                     *left
                 } else {
@@ -275,7 +300,14 @@ impl AstNode {
                     right.traverse_simplify_group(local_id, tmp_alloc, output);
                     AstNode::TmpBinding { local_id }
                 };
-                output.push(AstNode::BindTmp { local_id: output_binding, value: Box::new(AstNode::Math { left: Box::new(left), oper, right: Box::new(right) })});
+                output.push(AstNode::BindTmp {
+                    local_id: output_binding,
+                    value: Box::new(AstNode::Op {
+                        left: Box::new(left),
+                        oper,
+                        right: Box::new(right),
+                    }),
+                });
             }
             AstNode::FunctionCall { name, args } => {
                 let simplified_args = args
@@ -293,11 +325,20 @@ impl AstNode {
                     })
                     .collect::<Vec<_>>();
 
-                output.push(AstNode::BindTmp { local_id: output_binding, value: Box::new(AstNode::FunctionCall { name, args: simplified_args })});
+                output.push(AstNode::BindTmp {
+                    local_id: output_binding,
+                    value: Box::new(AstNode::FunctionCall {
+                        name,
+                        args: simplified_args,
+                    }),
+                });
             }
             other => {
-                output.push(AstNode::BindTmp { local_id: output_binding, value: Box::new(other) });
-            },
+                output.push(AstNode::BindTmp {
+                    local_id: output_binding,
+                    value: Box::new(other),
+                });
+            }
         }
     }
 
@@ -306,22 +347,20 @@ impl AstNode {
     /// however, thoes binding should not outlive the code produced by this, and therefore it is fine.
     ///
     /// **NOTE TO FUTURE SELF: MAKE TEMPORARY BINDINGS BE NAMED DIFFERENTLY BASED ON SCOPE! (blocks, else statements, etc). OTHERWISE THINGS WILL BREAK!**
+    /// ! SECOND NOTE: THIS IS UNTRUE, as the only nesting case is in the traverse_simplify_groups function and that is completely contained
     ///
     /// TODO: **SECOND NOTE TO FUTURE SELF: IN CODEGEN, WRITE A LIFETIME/USE CHECKER FOR THESE TEMPORARY THINGS**
+    /// ! this is still a valid point
     ///
     /// also, the bindings are overwritten anyway (before they are read again)
     pub fn simplify(self) -> Vec<AstNode> {
         match self {
-            AstNode::Block {
-                inner,
-            } => {
-                vec![AstNode::Block { inner: inner.into_iter()
-                    .flat_map(|n| {
-                        // ! this right here is why the warning exists at the top of this function.
-                        // ! a block can contain a block, and if these are not namespaced, properly, issues WILL arise
-                        n.simplify().into_iter()
-                    })
-                    .collect()
+            AstNode::Block { inner } => {
+                vec![AstNode::Block {
+                    inner: inner
+                        .into_iter()
+                        .flat_map(|n| n.simplify().into_iter())
+                        .collect(),
                 }]
             }
             AstNode::FunctionDef {
@@ -334,7 +373,7 @@ impl AstNode {
                 debug_assert!(simple.len() == 1);
                 let code = match simple.pop().unwrap() {
                     AstNode::Block { inner } => inner,
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
                 vec![AstNode::FunctionDef {
                     name,
@@ -352,54 +391,74 @@ impl AstNode {
             }
             AstNode::Return {
                 /// None is the same as typing `return;`, Some is `return <some thing here>`
-                value: Some(value),
+                    value: Some(value),
             } => {
                 let mut alloc = TmpVarAllocator::new();
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 value.traverse_simplify_group(return_binding, &mut alloc, &mut output);
-                output.push(AstNode::Return { value: Some(Box::new(AstNode::TmpBinding { local_id: return_binding })) });
+                output.push(AstNode::Return {
+                    value: Some(Box::new(AstNode::TmpBinding {
+                        local_id: return_binding,
+                    })),
+                });
                 output
             }
-            AstNode::Let {
-                ident,
-                typ,
-                value,
-            } => {
+            AstNode::Let { ident, typ, value } => {
                 let mut alloc = TmpVarAllocator::new();
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 value.traverse_simplify_group(return_binding, &mut alloc, &mut output);
-                output.push(AstNode::Let { ident, typ, value: Box::new(AstNode::TmpBinding { local_id: return_binding }) });
+                output.push(AstNode::Let {
+                    ident,
+                    typ,
+                    value: Box::new(AstNode::TmpBinding {
+                        local_id: return_binding,
+                    }),
+                });
                 output
             }
-            AstNode::Const {
-                ident,
-                typ,
-                value,
-            } => {
+            AstNode::Set { ident, value } => {
                 let mut alloc = TmpVarAllocator::new();
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 value.traverse_simplify_group(return_binding, &mut alloc, &mut output);
-                output.push(AstNode::Const { ident, typ, value: Box::new(AstNode::TmpBinding { local_id: return_binding }) });
+                output.push(AstNode::Set {
+                    ident,
+                    value: Box::new(AstNode::TmpBinding {
+                        local_id: return_binding,
+                    }),
+                });
                 output
             }
-            node @ AstNode::Math { .. } => {
+            AstNode::Const { ident, typ, value } => {
+                let mut alloc = TmpVarAllocator::new();
+                let return_binding = alloc.next();
+                let mut output = vec![];
+                value.traverse_simplify_group(return_binding, &mut alloc, &mut output);
+                output.push(AstNode::Const {
+                    ident,
+                    typ,
+                    value: Box::new(AstNode::TmpBinding {
+                        local_id: return_binding,
+                    }),
+                });
+                output
+            }
+            node @ AstNode::Op { .. } => {
                 let mut alloc = TmpVarAllocator::new();
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 node.traverse_simplify_group(return_binding, &mut alloc, &mut output);
                 output
             }
-            AstNode::Loop {
-                code: Some(code),
-            } => {
-                vec![AstNode::Loop { code: Some(code.into_iter()
-                    .flat_map(|n| {
-                        n.simplify().into_iter()
-                    })
-                    .collect())
+            AstNode::Loop { code: Some(code) } => {
+                vec![AstNode::Loop {
+                    code: Some(
+                        code.into_iter()
+                            .flat_map(|n| n.simplify().into_iter())
+                            .collect(),
+                    ),
                 }]
             }
             AstNode::While {
@@ -411,15 +470,19 @@ impl AstNode {
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 condition.traverse_simplify_group(return_binding, &mut alloc, &mut output);
-                let condition = Box::new(AstNode::TmpBinding { local_id: return_binding });
+                let condition = Box::new(AstNode::TmpBinding {
+                    local_id: return_binding,
+                });
                 //code simplification
-                let code = code.into_iter()
-                    .flat_map(|n| {
-                        n.simplify().into_iter()
-                    })
+                let code = code
+                    .into_iter()
+                    .flat_map(|n| n.simplify().into_iter())
                     .collect();
                 //output
-                output.push(AstNode::While { condition, code: Some(code) });
+                output.push(AstNode::While {
+                    condition,
+                    code: Some(code),
+                });
                 output
             }
             AstNode::If {
@@ -431,15 +494,19 @@ impl AstNode {
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 condition.traverse_simplify_group(return_binding, &mut alloc, &mut output);
-                let condition = Box::new(AstNode::TmpBinding { local_id: return_binding });
+                let condition = Box::new(AstNode::TmpBinding {
+                    local_id: return_binding,
+                });
                 //code simplification
-                let code = code.into_iter()
-                    .flat_map(|n| {
-                        n.simplify().into_iter()
-                    })
+                let code = code
+                    .into_iter()
+                    .flat_map(|n| n.simplify().into_iter())
                     .collect();
                 //output
-                output.push(AstNode::If { condition, code: Some(code) });
+                output.push(AstNode::If {
+                    condition,
+                    code: Some(code),
+                });
                 output
             }
             AstNode::ElseIf {
@@ -451,41 +518,42 @@ impl AstNode {
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 condition.traverse_simplify_group(return_binding, &mut alloc, &mut output);
-                let condition = Box::new(AstNode::TmpBinding { local_id: return_binding });
+                let condition = Box::new(AstNode::TmpBinding {
+                    local_id: return_binding,
+                });
                 //code simplification
-                let code = code.into_iter()
-                    .flat_map(|n| {
-                        n.simplify().into_iter()
-                    })
+                let code = code
+                    .into_iter()
+                    .flat_map(|n| n.simplify().into_iter())
                     .collect();
                 //output
-                output.push(AstNode::ElseIf { condition, code: Some(code) });
+                output.push(AstNode::ElseIf {
+                    condition,
+                    code: Some(code),
+                });
                 output
             }
-            AstNode::Else {
-                code: Some(code),
-            } => {
-                vec![AstNode::Else { code: Some(code.into_iter()
-                    .flat_map(|n| {
-                        n.simplify().into_iter()
-                    })
-                    .collect())
+            AstNode::Else { code: Some(code) } => {
+                vec![AstNode::Else {
+                    code: Some(
+                        code.into_iter()
+                            .flat_map(|n| n.simplify().into_iter())
+                            .collect(),
+                    ),
                 }]
             }
-            tk @ (
-                AstNode::NumLiteral(..) |
-                AstNode::StrLiteral(..) |
-                AstNode::BoolLiteral(..) |
-                AstNode::Ident(..) |
-                AstNode::Break |
-                AstNode::Continue |
-                AstNode::Return { value: None } |
-                AstNode::ConstIdent { .. }
-            ) => vec![tk],
-            AstNode::SimplifiedGroup { .. } |
-            AstNode::BindTmp { .. } |
-            AstNode::TmpBinding { .. } => panic!("cannot simplify a simplification symbol"),
-            _ => unreachable!()
+            tk @ (AstNode::NumLiteral(..)
+            | AstNode::StrLiteral(..)
+            | AstNode::BoolLiteral(..)
+            | AstNode::Ident(..)
+            | AstNode::Break
+            | AstNode::Continue
+            | AstNode::Return { value: None }
+            | AstNode::ConstIdent { .. }) => vec![tk],
+            AstNode::SimplifiedGroup { .. }
+            | AstNode::BindTmp { .. }
+            | AstNode::TmpBinding { .. } => panic!("cannot simplify a simplification symbol"),
+            _ => unreachable!(),
         }
     }
 
@@ -502,8 +570,13 @@ impl AstNode {
         }
     }
 
+    /// is the node a value expr (has a value that it directly returns)
+    pub fn is_value_expr(&self) -> bool {
+        ValueExpr::ast_node_is_value_expr(self)
+    }
+
     pub fn is_math(&self) -> bool {
-        if let AstNode::Math { .. } = self {
+        if let AstNode::Op { .. } = self {
             true
         } else {
             false
@@ -625,51 +698,67 @@ impl AstNode {
                                 })
                             }
                             //* new math things
-                            tks if tks.iter().filter(|e| {
-                                if let Tokens::Token(BaseToken {
-                                    val: BaseTokenVal::Token(Token::Math(..)),
-                                    ..
-                                }) = e {
-                                    true
-                                } else {
-                                    false
-                                }
-                            }).count() >= 1 => {
-                                if tks.iter().filter(|e| {
+                            tks if tks
+                                .iter()
+                                .filter(|e| {
                                     if let Tokens::Token(BaseToken {
-                                        val: BaseTokenVal::Token(Token::Math(..)),
+                                        val: BaseTokenVal::Token(Token::Op(..)),
                                         ..
-                                    }) = e {
+                                    }) = e
+                                    {
                                         true
                                     } else {
                                         false
                                     }
-                                }).count() > 1 {
+                                })
+                                .count()
+                                >= 1 =>
+                            {
+                                if tks
+                                    .iter()
+                                    .filter(|e| {
+                                        if let Tokens::Token(BaseToken {
+                                            val: BaseTokenVal::Token(Token::Op(..)),
+                                            ..
+                                        }) = e
+                                        {
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                    .count()
+                                    > 1
+                                {
                                     panic!("Complex mathmatical expressions are not currently supported (one operator per group)");
                                 } else {
-                                    let mut parts = tks.split_inclusive(|e| {
-                                        match e {
+                                    let mut parts = tks
+                                        .split_inclusive(|e| match e {
                                             Tokens::Token(BaseToken {
-                                                val: BaseTokenVal::Token(Token::Math(..)),
+                                                val: BaseTokenVal::Token(Token::Op(..)),
                                                 ..
                                             }) => true,
                                             _ => false,
-                                        }
-                                    })
+                                        })
                                         .map(|x| x.to_vec())
                                         .collect::<Vec<_>>();
                                     debug_assert!(parts.len() == 2);
                                     let right = parts.pop().unwrap();
                                     let mut left = parts.pop().unwrap();
                                     let op = if let Some(Tokens::Token(BaseToken {
-                                        val: BaseTokenVal::Token(Token::Math(op)),
+                                        val: BaseTokenVal::Token(Token::Op(op)),
                                         ..
-                                    })) = left.pop() {
+                                    })) = left.pop()
+                                    {
                                         op
                                     } else {
                                         unreachable!();
                                     };
-                                    Ok(AstNode::Math { left: Box::new(AstNode::parse(Tokens::Group(left))?), oper: op, right: Box::new(AstNode::parse(Tokens::Group(right))?) })
+                                    Ok(AstNode::Op {
+                                        left: Box::new(AstNode::parse(Tokens::Group(left))?),
+                                        oper: op,
+                                        right: Box::new(AstNode::parse(Tokens::Group(right))?),
+                                    })
                                 }
                             }
                             _ => {
@@ -692,7 +781,7 @@ impl AstNode {
                                 //     _ => {
                                 //         #[derive(Debug, Clone, PartialEq)]
                                 //         enum OpOrSubExpr {
-                                //             Op(MathOp),
+                                //             Op(Op),
                                 //             SubExpr(AstNode),
                                 //         }
                                 //         info!("parts: {parts:#?}");
@@ -722,7 +811,7 @@ impl AstNode {
                                 //         info!("raw: {raw:#?}");
                                 //     }
                                 // }
-                            },
+                            }
                         }
                     }
                 }
@@ -819,6 +908,17 @@ impl AstNode {
                 }), ..] => {
                     panic!("Error @ {loc:?} Let statements must have types");
                 }
+                //* set statement
+                [Tokens::Token(BaseToken {
+                    val: BaseTokenVal::Ident(binding),
+                    ..
+                }), Tokens::Token(BaseToken {
+                    val: BaseTokenVal::Token(Token::OpAssign),
+                    ..
+                }), rest @ ..] => Ok(AstNode::Set {
+                    ident: binding.clone(),
+                    value: Box::new(AstNode::parse(Tokens::Group(rest.to_vec()))?),
+                }),
                 //* const statement
                 [Tokens::Token(BaseToken {
                     val: BaseTokenVal::Token(Token::Const),
