@@ -55,17 +55,16 @@ fn validate_valuexpr_useage(
     for binding in used_bindings {
         match binding {
             Binding::Variable(name) => {
-                if !(
-                    consts.contains_key(&name) ||
-                    ident_bindings.contains_key(&name) ||
-                    locals.contains_key(&name)
-                ) {
-                    return Err(ValueExprUseageError::UseBeforeDefine(name))
+                if !(consts.contains_key(&name)
+                    || ident_bindings.contains_key(&name)
+                    || locals.contains_key(&name))
+                {
+                    return Err(ValueExprUseageError::UseBeforeDefine(name));
                 }
             }
             Binding::Temporary(id) => {
                 if !temporaries.contains_key(&id) {
-                    return Err(ValueExprUseageError::TemporaryUseBeforeDefine(id))
+                    return Err(ValueExprUseageError::TemporaryUseBeforeDefine(id));
                 }
             }
         }
@@ -73,7 +72,7 @@ fn validate_valuexpr_useage(
 
     for function in used_functions {
         if !functions.contains_key(&function) {
-            return Err(ValueExprUseageError::UndefinedFunction(function))
+            return Err(ValueExprUseageError::UndefinedFunction(function));
         }
     }
 
@@ -110,7 +109,14 @@ pub fn walk_controll_flow(
             AstNode::BindTmp { local_id, value } => {
                 let v_expr = ValueExpr::from_ast_node(*value)
                     .expect("Value of temp binding is not a value expr: found {value:#?}");
-                if let Err(e) = validate_valuexpr_useage(&v_expr, &functions, &global_consts, &global_ident_bindings, &locals, &temporaries) {
+                if let Err(e) = validate_valuexpr_useage(
+                    &v_expr,
+                    &functions,
+                    &global_consts,
+                    &global_ident_bindings,
+                    &locals,
+                    &temporaries,
+                ) {
                     panic!("Error validating value expr: {e:#?}");
                 }
                 if let Some(..) = temporaries.insert(local_id, {
@@ -122,10 +128,21 @@ pub fn walk_controll_flow(
                 }
                 lir.push(lir::Operation::Bind(Binding::Temporary(local_id), v_expr))
             }
-            AstNode::Let { ident, typ: _ /* deal with this when typeck comes around */, value } => {
+            AstNode::Let {
+                ident,
+                typ: _, /* deal with this when typeck comes around */
+                value,
+            } => {
                 let v_expr = ValueExpr::from_ast_node(*value)
                     .expect("Value of binding is not a value expr: found {value:#?}");
-                if let Err(e) = validate_valuexpr_useage(&v_expr, &functions, &global_consts, &global_ident_bindings, &locals, &temporaries) {
+                if let Err(e) = validate_valuexpr_useage(
+                    &v_expr,
+                    &functions,
+                    &global_consts,
+                    &global_ident_bindings,
+                    &locals,
+                    &temporaries,
+                ) {
                     panic!("Error validating value expr: {e:#?}");
                 }
                 if global_consts.contains_key(&ident) {
@@ -134,7 +151,12 @@ pub fn walk_controll_flow(
                 if global_ident_bindings.contains_key(&ident) {
                     panic!("Local variable defined with same name as existing constant identifier binding! name: {ident:?}");
                 }
-                if let Some(..) = locals.insert(ident.clone(), Local { value: v_expr.clone() }) {
+                if let Some(..) = locals.insert(
+                    ident.clone(),
+                    Local {
+                        value: v_expr.clone(),
+                    },
+                ) {
                     panic!("Local variable binding defined twice: {ident}");
                 }
                 lir.push(lir::Operation::Bind(Binding::Variable(ident), v_expr));

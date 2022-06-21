@@ -2,7 +2,7 @@ use regex::Regex;
 
 use crate::{
     lexer2::Rule,
-    parse2::{Op, Token},
+    parse2::types::lexer_tokens::{Op, Token},
 };
 
 macro_rules! rule {

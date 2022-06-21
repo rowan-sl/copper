@@ -1,184 +1,18 @@
 pub mod lex_rules;
 pub mod scoped;
+pub mod temp_alloc;
+pub mod types;
 
-use crate::{lir::ValueExpr, util::TmpVarAllocator};
+use crate::lir::ValueExpr;
 
-use self::scoped::Tokens;
 pub use lex_rules::rules;
-
-pub type BaseToken = crate::lexer2::BaseToken<Token>;
-pub type BaseTokenVal = crate::lexer2::BaseTokenVal<Token>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Token {
-    ParenOpen,
-    ParenClose,
-    ScopeOpen,
-    ScopeClose,
-    Fn,
-    Let,
-    Const,
-    ConstIdent,
-    Loop,
-    While,
-    If,
-    Else,
-    Break,
-    Continue,
-    Return,
-    TypeHint,
-    SmallArrow,
-    Comma,
-    OpAssign,
-    NullT,  // `null`
-    NeverT, // `!`
-    Op(Op),
-    BoolLiteral(bool),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Op {
-    Add,
-    Sub,
-    Div,
-    Mul,
-    Rem,
-    Eq,
-    Gtn,
-    Ltn,
-    GtnEq,
-    LtnEq,
-    /// logical and
-    And,
-    /// logical or
-    Or,
-    // Not,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ASTType {
-    Named(String),
-    Never,
-    Null,
-}
-
-impl ASTType {
-    pub fn try_from_token(tk: BaseTokenVal) -> Option<Self> {
-        match tk {
-            BaseTokenVal::Ident(name) => Some(Self::Named(name)),
-            BaseTokenVal::Token(Token::NeverT) => Some(Self::Never),
-            BaseTokenVal::Token(Token::NullT) => Some(Self::Null),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct FunctionArguments {
-    ident: String,
-    typ: ASTType,
-}
-
-impl FunctionArguments {
-    pub fn parse(tokens: &Vec<Tokens>) -> Option<Vec<FunctionArguments>> {
-        enum State {
-            NeedsIdent,
-            NeedsTypeHint { ident: String },
-            NeedsType { ident: String },
-            NeedsComma { ident: String, typ: ASTType },
-        }
-        let mut state = State::NeedsIdent;
-        let mut args = vec![];
-        for token in tokens {
-            match (token, state) {
-                (
-                    Tokens::Token(BaseToken {
-                        val: BaseTokenVal::Ident(ident),
-                        ..
-                    }),
-                    State::NeedsIdent,
-                ) => {
-                    state = State::NeedsTypeHint {
-                        ident: ident.clone(),
-                    };
-                }
-                (
-                    Tokens::Token(BaseToken {
-                        val: BaseTokenVal::Token(Token::TypeHint),
-                        ..
-                    }),
-                    State::NeedsTypeHint { ident },
-                ) => {
-                    state = State::NeedsType { ident };
-                }
-                (Tokens::Token(BaseToken { val: typ, .. }), State::NeedsType { ident })
-                    if ASTType::try_from_token(typ.clone()).is_some() =>
-                {
-                    state = State::NeedsComma {
-                        ident,
-                        typ: ASTType::try_from_token(typ.clone()).unwrap(),
-                    };
-                }
-                (
-                    Tokens::Token(BaseToken {
-                        val: BaseTokenVal::Token(Token::Comma),
-                        ..
-                    }),
-                    State::NeedsComma { ident, typ },
-                ) => {
-                    args.push(FunctionArguments { ident, typ });
-                    state = State::NeedsIdent;
-                }
-                _ => return None,
-            }
-        }
-        if let State::NeedsComma { ident, typ } = state {
-            args.push(FunctionArguments { ident, typ });
-        }
-        Some(args)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CallArguments {
-    pub args: AstNode,
-}
-
-impl CallArguments {
-    pub fn parse(tokens: &Vec<Tokens>) -> Result<Vec<CallArguments>, BuildAstError> {
-        // info!("parsing call args from {tokens:?}");
-        let mut current_arg_tokens = vec![];
-        let mut args = vec![];
-
-        for token in tokens {
-            match token {
-                Tokens::Token(BaseToken {
-                    val: BaseTokenVal::Token(Token::Comma),
-                    loc,
-                }) => {
-                    if current_arg_tokens.is_empty() {
-                        //TODO make this into an actuall error
-                        warn!("unneded separator in function args at {loc:?}");
-                    } else {
-                        args.push(CallArguments {
-                            args: AstNode::parse(Tokens::Group(current_arg_tokens))?,
-                        });
-                        current_arg_tokens = vec![];
-                    }
-                }
-                other => {
-                    current_arg_tokens.push(other.clone());
-                }
-            }
-        }
-        if !current_arg_tokens.is_empty() {
-            args.push(CallArguments {
-                args: AstNode::parse(Tokens::Group(current_arg_tokens))?,
-            });
-        }
-        Ok(args)
-    }
-}
+use scoped::Tokens;
+use temp_alloc::TmpVarAllocator;
+use types::{
+    ast_types::ASTType,
+    functions::{CallArguments, FunctionArguments},
+    lexer_tokens::{BaseToken, BaseTokenVal, Op, Token},
+};
 
 pub type AstBlock = Vec<AstNode>;
 pub type AstGroup = Vec<AstNode>;
@@ -761,57 +595,7 @@ impl AstNode {
                                     })
                                 }
                             }
-                            _ => {
-                                todo!("unhandled group expression {inner:?}")
-                                //? attempt at making order of operations work, currently not in use or working
-                                // let mut parts = inner.split_inclusive(|e| {
-                                //     match e {
-                                //         Tokens::Token(BaseToken {
-                                //             val: BaseTokenVal::Token(Token::Math(..)),
-                                //             ..
-                                //         }) => true,
-                                //         _ => false,
-                                //     }
-                                // })
-                                //     .map(|x| x.to_vec())
-                                //     .collect::<Vec<_>>();
-                                // match parts.len() {
-                                //     0 => unreachable!(),
-                                //     // n if n % 2 == 1 => panic!("Invalid mathmatical expression: ends with operator"),
-                                //     _ => {
-                                //         #[derive(Debug, Clone, PartialEq)]
-                                //         enum OpOrSubExpr {
-                                //             Op(Op),
-                                //             SubExpr(AstNode),
-                                //         }
-                                //         info!("parts: {parts:#?}");
-                                //         let raw = {
-                                //             let last = AstNode::parse(Tokens::Group(parts.pop().unwrap()))?;
-                                //             let mut raw: Vec<OpOrSubExpr> = vec![];
-                                //             for mut part in parts {
-                                //                 if part.len() <= 1 {// in reality, this can only be len of 1 as len of zero is caught elsewhere
-                                //                     panic!("Invalid mathmatical operation: only contains the operator, and no left-hand content!");
-                                //                 } else {
-                                //                     let op = if let Some(Tokens::Token(BaseToken {
-                                //                         val: BaseTokenVal::Token(Token::Math(op)),
-                                //                         ..
-                                //                     })) = part.pop() {
-                                //                         op
-                                //                     } else {
-                                //                         unreachable!();
-                                //                     };
-                                //                     let rest = AstNode::parse(Tokens::Group(part))?;
-                                //                     raw.push(OpOrSubExpr::Op(op));
-                                //                     raw.push(OpOrSubExpr::SubExpr(rest));
-                                //                 }
-                                //             }
-                                //             raw.push(OpOrSubExpr::SubExpr(last));
-                                //             raw
-                                //         };
-                                //         info!("raw: {raw:#?}");
-                                //     }
-                                // }
-                            }
+                            _ => todo!("unhandled group expression {inner:?}"),
                         }
                     }
                 }
@@ -1008,10 +792,6 @@ impl AstNode {
             }
         }
     }
-}
-
-pub fn build_ast(tk: Tokens) -> Result<AstNode, BuildAstError> {
-    AstNode::parse(tk)
 }
 
 #[derive(Debug, Clone, thiserror::Error)]

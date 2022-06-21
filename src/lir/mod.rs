@@ -1,6 +1,6 @@
 //! low-level intermediate representation
 
-use crate::parse2::{AstNode, Op};
+use crate::parse2::{types::lexer_tokens::Op, AstNode};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Binding {

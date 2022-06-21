@@ -13,10 +13,12 @@ pub mod lir;
 pub mod parse2;
 pub mod util;
 
-use std::{fmt::Write as _,  /* fs::OpenOptions, io::Write as _, */ path::PathBuf};
+use std::{fmt::Write as _, /* fs::OpenOptions, io::Write as _, */ path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
+
+use crate::parse2::AstNode;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -82,7 +84,7 @@ fn main() -> Result<()> {
     }
 
     debug!("Parsing AST");
-    let ast = parse2::build_ast(scoped)?;
+    let ast = AstNode::parse(scoped)?;
 
     if args.flags.contains(&Flag::ShowAst) {
         debug!("AST:\n{ast:#?}");

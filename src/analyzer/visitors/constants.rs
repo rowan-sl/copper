@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 
 use crate::{
     analyzer::visitor::Visitor,
-    parse2::{ASTType, AstNode},
+    parse2::{types::ast_types::ASTType, AstNode},
 };
 
 #[derive(Debug, Clone, PartialEq)]
