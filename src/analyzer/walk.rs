@@ -133,6 +133,9 @@ pub fn walk_controll_flow(
             condition: ValueExpr,
             if_true: Vec<lir::Operation>,
         },
+        ElseExpr {
+            code: Vec<lir::Operation>,
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -150,6 +153,7 @@ pub fn walk_controll_flow(
             condition: ValueExpr,
             condition_code: Option<Vec<lir::Operation>>,
         },
+        ElseExpr,
     }
 
     #[derive(Debug, Clone)]
@@ -186,8 +190,11 @@ pub fn walk_controll_flow(
                 } => match lir.last_mut() {
                     Some(lir::Operation::IfChain {
                         chain,
-                        base_case: _,
+                        base_case,
                     }) => {
+                        // if this fails something terrible is going on
+                        debug_assert!(chain.is_empty());
+                        debug_assert!(base_case.is_none());
                         chain.push(If {
                             condition_code,
                             condition,
@@ -203,8 +210,10 @@ pub fn walk_controll_flow(
                 } => match lir.last_mut() {
                     Some(lir::Operation::IfChain {
                         chain,
-                        base_case: _,
+                        base_case,
                     }) => {
+                        debug_assert!(!chain.is_empty());// if this fails, something terrible has happened
+                        assert!(base_case.is_none(), "`else if` cannot be preceeded by `else`");
                         chain.push(If {
                             condition_code,
                             condition,
@@ -213,6 +222,14 @@ pub fn walk_controll_flow(
                     }
                     other => panic!("Late operation failure: expected if chain, found {other:#?}"),
                 },
+                LateOperation::ElseExpr { code } => match lir.last_mut() {
+                    Some(lir::Operation::IfChain { chain, base_case }) => {
+                        debug_assert!(!chain.is_empty());// if this fails, something terrible has happened
+                        assert!(base_case.is_none(), "Cannot have multiple else cases!");
+                        *base_case = Some(code);
+                    }
+                    other => panic!("Late operation failure: expected if chain, found {other:#?}"),
+                }
             }
         }
 
@@ -373,6 +390,20 @@ pub fn walk_controll_flow(
                     });
                     continue 'walk;
                 }
+                AstNode::Else { code: else_code } => {
+                    let else_code = else_code.unwrap();
+                    stack.push(Frame {
+                        once_done,
+                        code,
+                        current_lir: lir,
+                    });
+                    stack.push(Frame {
+                        once_done: OnScopeFinish::ElseExpr,
+                        code: else_code,
+                        current_lir: vec![],
+                    });
+                    continue 'walk;
+                }
                 _ => todo!(),
             }
         }
@@ -398,6 +429,7 @@ pub fn walk_controll_flow(
                 condition,
                 if_true: lir,
             }),
+            OnScopeFinish::ElseExpr => late_opers.push(LateOperation::ElseExpr { code: lir }),
             OnScopeFinish::FillConditionalCode => {
                 match stack.last_mut() {
                     Some(Frame {
