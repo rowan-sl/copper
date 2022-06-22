@@ -4,25 +4,24 @@ const msg: str = "Hello, World!";
 const ident out = "message1";
 
 fn main() -> ! {
-    let x: num = 1;
-    // let x: num = fib(4);
+    let x: num = fib(4);
 }
 
-// fn fib(n: num) -> num {
-//     if n <= 1 {
-// 		return n;
-//     }
+fn fib(n: num) -> num {
+    if n <= 1 {
+		return n;
+    }
 
-//     let grandparent: num = 1;
-//     let parent: num = 2;
-//     let me: num = parent;
-//     let i: num = 3;
-//     while i < n {
-//         i = i + 1;
-//         me = parent + grandparent;
-//         grandparent = parent;
-//         parent = me;
-//     }
+    // let grandparent: num = 1;
+    // let parent: num = 2;
+    // let me: num = parent;
+    // let i: num = 3;
+    // while i < n {
+    //     i = i + 1;
+    //     me = parent + grandparent;
+    //     grandparent = parent;
+    //     parent = me;
+    // }
 
-//     return me;
-// }
+    // return me;
+}

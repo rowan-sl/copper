@@ -8,7 +8,7 @@ use crate::{
         raw_functions::RawFnMap,
     },
     lir::{self, Binding, ValueExpr},
-    parse2::{AstBlock, AstNode},
+    parse2::{types::functions::FunctionArguments, AstBlock, AstNode},
     util::take_n,
 };
 
@@ -43,6 +43,7 @@ pub enum ValueExprUseageError {
 
 fn validate_valuexpr_useage(
     expr: &ValueExpr,
+    current_fn_args: &Vec<FunctionArguments>,
     functions: &RawFnMap,
     consts: &ConstantMap,
     ident_bindings: &CstIdentMap,
@@ -55,9 +56,13 @@ fn validate_valuexpr_useage(
     for binding in used_bindings {
         match binding {
             Binding::Variable(name) => {
+                let args_has = current_fn_args
+                    .iter()
+                    .fold(false, |acc, x| acc || x.ident == name);
                 if !(consts.contains_key(&name)
                     || ident_bindings.contains_key(&name)
-                    || locals.contains_key(&name))
+                    || locals.contains_key(&name)
+                    || args_has)
                 {
                     return Err(ValueExprUseageError::UseBeforeDefine(name));
                 }
@@ -79,9 +84,24 @@ fn validate_valuexpr_useage(
     Ok(())
 }
 
+fn valuexpr_update_temporaries(expr: &ValueExpr, temporaries: &mut HashMap<u64, Temporary>) {
+    let used_bindings = expr.uses();
+
+    for binding in used_bindings {
+        if let Binding::Temporary(id) = binding {
+            if let None = temporaries.remove(&id) {
+                unreachable!(
+                    "please validate temporaries useage before calling update_temporaries"
+                );
+            }
+        }
+    }
+}
+
 pub fn walk_controll_flow(
     fn_name: String,
     code: AstBlock,
+    arguments: &Vec<FunctionArguments>,
     functions: &RawFnMap,
     global_consts: &ConstantMap,
     global_ident_bindings: &CstIdentMap,
@@ -111,6 +131,7 @@ pub fn walk_controll_flow(
                     .expect("Value of temp binding is not a value expr: found {value:#?}");
                 if let Err(e) = validate_valuexpr_useage(
                     &v_expr,
+                    &arguments,
                     &functions,
                     &global_consts,
                     &global_ident_bindings,
@@ -119,6 +140,7 @@ pub fn walk_controll_flow(
                 ) {
                     panic!("Error validating value expr: {e:#?}");
                 }
+                valuexpr_update_temporaries(&v_expr, &mut temporaries);
                 if let Some(..) = temporaries.insert(local_id, {
                     Temporary {
                         value: v_expr.clone(),
@@ -137,6 +159,7 @@ pub fn walk_controll_flow(
                     .expect("Value of binding is not a value expr: found {value:#?}");
                 if let Err(e) = validate_valuexpr_useage(
                     &v_expr,
+                    &arguments,
                     &functions,
                     &global_consts,
                     &global_ident_bindings,
@@ -145,6 +168,7 @@ pub fn walk_controll_flow(
                 ) {
                     panic!("Error validating value expr: {e:#?}");
                 }
+                valuexpr_update_temporaries(&v_expr, &mut temporaries);
                 if global_consts.contains_key(&ident) {
                     panic!("Local variable defined with same name as existing constant! name: {ident:?}");
                 }
@@ -157,9 +181,38 @@ pub fn walk_controll_flow(
                         value: v_expr.clone(),
                     },
                 ) {
-                    panic!("Local variable binding defined twice: {ident}");
+                    // not actually an errror lol
+                    // panic!("Local variable binding defined twice: {ident}");
                 }
                 lir.push(lir::Operation::Bind(Binding::Variable(ident), v_expr));
+            }
+            AstNode::Set { ident, value } => {
+                let v_expr = ValueExpr::from_ast_node(*value)
+                    .expect("Value of binding is not a value expr: found {value:#?}");
+                if let Err(e) = validate_valuexpr_useage(
+                    &v_expr,
+                    &arguments,
+                    &functions,
+                    &global_consts,
+                    &global_ident_bindings,
+                    &locals,
+                    &temporaries,
+                ) {
+                    panic!("Error validating value expr: {e:#?}");
+                }
+                valuexpr_update_temporaries(&v_expr, &mut temporaries);
+                if locals
+                    .insert(
+                        ident.clone(),
+                        Local {
+                            value: v_expr.clone(),
+                        },
+                    )
+                    .is_none()
+                {
+                    panic!("Attempted to update a variable that does not exist! (name:`{ident}`)");
+                }
+                lir.push(lir::Operation::Update(Binding::Variable(ident), v_expr));
             }
             _ => todo!(),
         }

@@ -8,8 +8,8 @@ use crate::parse2::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionArguments {
-    ident: String,
-    typ: ASTType,
+    pub ident: String,
+    pub typ: ASTType,
 }
 
 impl FunctionArguments {
