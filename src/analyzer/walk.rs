@@ -154,6 +154,9 @@ pub fn walk_controll_flow(
             condition_code: Option<Vec<lir::Operation>>,
         },
         ElseExpr,
+        WhileExpr {
+            condition: ValueExpr,
+        },
     }
 
     #[derive(Debug, Clone)]
@@ -401,6 +404,60 @@ pub fn walk_controll_flow(
                     });
                     continue 'walk;
                 }
+                AstNode::Return { value } => {
+                    lir.push(lir::Operation::Return(if let Some(value) = value {
+                        let v_expr = ValueExpr::from_ast_node(*value)
+                            .expect("Value of return is not a value expr: found {value:#?}");
+                        if let Err(e) = validate_valuexpr_useage(
+                            &v_expr,
+                            &arguments,
+                            &functions,
+                            &global_consts,
+                            &global_ident_bindings,
+                            &locals,
+                            &temporaries,
+                        ) {
+                            panic!("Error validating value expr: {e:#?}");
+                        }
+                        valuexpr_update_temporaries(&v_expr, &mut temporaries);
+                        Some(v_expr)
+                    } else {
+                        None
+                    }))
+                }
+                AstNode::While {
+                    condition,
+                    code: loop_code,
+                } => {
+                    let loop_code = loop_code.unwrap();
+                    let condition_vexpr = ValueExpr::from_ast_node(*condition)
+                        .expect("Value of binding is not a value expr: found {value:#?}");
+                    if let Err(e) = validate_valuexpr_useage(
+                        &condition_vexpr,
+                        &arguments,
+                        &functions,
+                        &global_consts,
+                        &global_ident_bindings,
+                        &locals,
+                        &temporaries,
+                    ) {
+                        panic!("Error validating value expr: {e:#?}");
+                    }
+                    valuexpr_update_temporaries(&condition_vexpr, &mut temporaries);
+                    stack.push(Frame {
+                        once_done,
+                        code,
+                        current_lir: lir,
+                    });
+                    stack.push(Frame {
+                        once_done: OnScopeFinish::WhileExpr {
+                            condition: condition_vexpr,
+                        },
+                        code: loop_code,
+                        current_lir: vec![],
+                    });
+                    continue 'walk;
+                }
                 _ => todo!(),
             }
         }
@@ -461,6 +518,16 @@ pub fn walk_controll_flow(
                     }
                     _ => panic!("FillConditionalCode not proceeded by a conditional!"),
                 }
+            }
+            OnScopeFinish::WhileExpr { condition } => {
+                stack
+                    .last_mut()
+                    .unwrap()
+                    .current_lir
+                    .push(lir::Operation::While {
+                        condition,
+                        code: lir,
+                    })
             }
         }
     }

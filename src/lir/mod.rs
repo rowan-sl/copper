@@ -152,4 +152,9 @@ pub enum Operation {
         chain: Vec<If>,
         base_case: Option<Vec<Operation>>,
     },
+    Return(Option<ValueExpr>),
+    While {
+        condition: ValueExpr,
+        code: Vec<Operation>,
+    },
 }
