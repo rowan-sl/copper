@@ -114,6 +114,10 @@ pub enum AstNode {
     TmpBinding {
         local_id: u64,
     },
+    /// "uses" the value of a node (effectively let _ = <node>)
+    ///
+    /// emitted when doing things like simplifying bare function calls - a binding is created but never used
+    Used(Box<AstNode>),
 }
 
 impl AstNode {
@@ -227,6 +231,9 @@ impl AstNode {
                 let return_binding = alloc.next();
                 let mut output = vec![];
                 node.traverse_simplify_group(return_binding, &mut alloc, &mut output);
+                output.push(AstNode::Used(Box::new(AstNode::TmpBinding {
+                    local_id: return_binding,
+                })));
                 output
             }
             AstNode::Return {

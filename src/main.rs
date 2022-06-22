@@ -105,6 +105,10 @@ fn main() -> Result<()> {
 
     info!("Performing validiation and generating IR");
 
+    let mut function_builtins = std::collections::HashMap::new();
+    function_builtins.insert("println".to_string(), ());
+    function_builtins.insert("printflush".to_string(), ());
+
     for (name, function) in &prog.raw_functions {
         info!("Validing function `{name}`");
         analyzer::walk::walk_controll_flow(
@@ -112,6 +116,7 @@ fn main() -> Result<()> {
             function.code.clone(),
             &function.args,
             &prog.raw_functions,
+            &function_builtins,
             &prog.global_const,
             &prog.const_idents,
         );

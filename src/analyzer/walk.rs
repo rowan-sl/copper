@@ -45,6 +45,7 @@ fn validate_valuexpr_useage(
     expr: &ValueExpr,
     current_fn_args: &Vec<FunctionArguments>,
     functions: &RawFnMap,
+    builtin_functions: &HashMap<String, ()>,
     consts: &ConstantMap,
     ident_bindings: &CstIdentMap,
     locals: &HashMap<String, Local>,
@@ -76,7 +77,7 @@ fn validate_valuexpr_useage(
     }
 
     for function in used_functions {
-        if !functions.contains_key(&function) {
+        if !(functions.contains_key(&function) || builtin_functions.contains_key(&function)) {
             return Err(ValueExprUseageError::UndefinedFunction(function));
         }
     }
@@ -103,9 +104,10 @@ pub fn walk_controll_flow(
     code: Vec<AstNode>,
     arguments: &Vec<FunctionArguments>,
     functions: &RawFnMap,
+    builtin_functions: &HashMap<String, ()>,
     global_consts: &ConstantMap,
     global_ident_bindings: &CstIdentMap,
-) {
+) -> Vec<lir::Operation> {
     let mut locals: HashMap<String, Local> = HashMap::new();
     let mut temporaries: HashMap<u64, Temporary> = HashMap::new();
     // let mut helper = ScopeHelper::new();
@@ -245,6 +247,7 @@ pub fn walk_controll_flow(
                         &v_expr,
                         &arguments,
                         &functions,
+                        &builtin_functions,
                         &global_consts,
                         &global_ident_bindings,
                         &locals,
@@ -273,6 +276,7 @@ pub fn walk_controll_flow(
                         &v_expr,
                         &arguments,
                         &functions,
+                        &builtin_functions,
                         &global_consts,
                         &global_ident_bindings,
                         &locals,
@@ -305,6 +309,7 @@ pub fn walk_controll_flow(
                         &v_expr,
                         &arguments,
                         &functions,
+                        &builtin_functions,
                         &global_consts,
                         &global_ident_bindings,
                         &locals,
@@ -412,6 +417,7 @@ pub fn walk_controll_flow(
                             &v_expr,
                             &arguments,
                             &functions,
+                            &builtin_functions,
                             &global_consts,
                             &global_ident_bindings,
                             &locals,
@@ -436,6 +442,7 @@ pub fn walk_controll_flow(
                         &condition_vexpr,
                         &arguments,
                         &functions,
+                        &builtin_functions,
                         &global_consts,
                         &global_ident_bindings,
                         &locals,
@@ -457,6 +464,24 @@ pub fn walk_controll_flow(
                         current_lir: vec![],
                     });
                     continue 'walk;
+                }
+                AstNode::Used(node) => {
+                    let v_expr = ValueExpr::from_ast_node(*node)
+                        .expect("Value of AstNode::Used is not a value expr: found {value:#?}");
+                    if let Err(e) = validate_valuexpr_useage(
+                        &v_expr,
+                        &arguments,
+                        &functions,
+                        &builtin_functions,
+                        &global_consts,
+                        &global_ident_bindings,
+                        &locals,
+                        &temporaries,
+                    ) {
+                        panic!("Error validating value expr: {e:#?}");
+                    }
+                    valuexpr_update_temporaries(&v_expr, &mut temporaries);
+                    lir.push(lir::Operation::Used(v_expr));
                 }
                 _ => todo!(),
             }
@@ -507,6 +532,7 @@ pub fn walk_controll_flow(
                             &condition,
                             &arguments,
                             &functions,
+                            &builtin_functions,
                             &global_consts,
                             &global_ident_bindings,
                             &locals,
@@ -533,4 +559,5 @@ pub fn walk_controll_flow(
     }
 
     info!("LIR for function `{fn_name}`: {global_lir:#?}");
+    global_lir
 }

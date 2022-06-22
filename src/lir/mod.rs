@@ -157,4 +157,6 @@ pub enum Operation {
         condition: ValueExpr,
         code: Vec<Operation>,
     },
+    /// "uses" an expr (mostly for temporary binding useage checks)
+    Used(ValueExpr),
 }
