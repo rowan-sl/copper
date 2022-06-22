@@ -138,6 +138,7 @@ impl ValueExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct If {
+    pub condition_code: Vec<Operation>,
     pub condition: ValueExpr,
     pub if_true: Vec<Operation>,
 }

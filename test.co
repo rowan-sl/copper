@@ -10,6 +10,8 @@ fn main() -> ! {
 fn fib(n: num) -> num {
     if n <= 1 {
         // return n;
+    } else if n >= 10 {
+
     }
 
     // let grandparent: num = 1;

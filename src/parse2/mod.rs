@@ -78,11 +78,17 @@ pub enum AstNode {
         code: Option<AstBlock>,
     },
     If {
+        /// this may or may not be populated, but if it is, then it MUST be included before evaluating `condition`
+        /// and can be omitted if `condition` is never evaluated
+        condition_code: Option<AstBlock>,
         condition: Box<AstNode>,
         /// will always be Some by the time it escapes the build_ast function
         code: Option<AstBlock>,
     },
     ElseIf {
+        /// this may or may not be populated, but if it is, then it MUST be included before evaluating `condition`
+        /// and can be omitted if `condition` is never evaluated
+        condition_code: Option<AstBlock>,
         condition: Box<AstNode>,
         /// will always be Some by the time it escapes the build_ast function
         code: Option<AstBlock>,
@@ -320,6 +326,7 @@ impl AstNode {
                 output
             }
             AstNode::If {
+                condition_code: None,
                 condition,
                 code: Some(code),
             } => {
@@ -337,13 +344,14 @@ impl AstNode {
                     .flat_map(|n| n.simplify().into_iter())
                     .collect();
                 //output
-                output.push(AstNode::If {
+                vec![AstNode::If {
+                    condition_code: Some(output),
                     condition,
                     code: Some(code),
-                });
-                output
+                }]
             }
             AstNode::ElseIf {
+                condition_code: None,
                 condition,
                 code: Some(code),
             } => {
@@ -361,11 +369,11 @@ impl AstNode {
                     .flat_map(|n| n.simplify().into_iter())
                     .collect();
                 //output
-                output.push(AstNode::ElseIf {
+                vec![AstNode::ElseIf {
+                    condition_code: Some(output),
                     condition,
                     code: Some(code),
-                });
-                output
+                }]
             }
             AstNode::Else { code: Some(code) } => {
                 vec![AstNode::Else {
@@ -763,6 +771,7 @@ impl AstNode {
                     val: BaseTokenVal::Token(Token::If),
                     ..
                 }), condition_tks @ ..] => Ok(AstNode::If {
+                    condition_code: None,
                     condition: Box::new(AstNode::parse(Tokens::Group(condition_tks.to_vec()))?),
                     code: None,
                 }),
@@ -779,6 +788,7 @@ impl AstNode {
                     val: BaseTokenVal::Token(Token::If),
                     ..
                 }), condition_tks @ ..] => Ok(AstNode::ElseIf {
+                    condition_code: None,
                     condition: Box::new(AstNode::parse(Tokens::Group(condition_tks.to_vec()))?),
                     code: None,
                 }),

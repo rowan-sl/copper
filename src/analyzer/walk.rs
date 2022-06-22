@@ -124,6 +124,12 @@ pub fn walk_controll_flow(
     #[derive(Debug, Clone)]
     pub enum LateOperation {
         IfExpr {
+            condition_code: Vec<lir::Operation>,
+            condition: ValueExpr,
+            if_true: Vec<lir::Operation>,
+        },
+        ElseIfExpr {
+            condition_code: Vec<lir::Operation>,
             condition: ValueExpr,
             if_true: Vec<lir::Operation>,
         },
@@ -133,8 +139,11 @@ pub fn walk_controll_flow(
     pub enum OnScopeFinish {
         /// exit the function with the current LIR scope
         Done,
+        /// condition code parsing for conditionals
+        FillConditionalCode,
         /// an if expression that requires a block (incomplete). next stage on the stack will contain the scope that this belongs to, so place it there
-        IfExpr { condition: ValueExpr },
+        IfExpr { condition: ValueExpr, condition_code: Option<Vec<lir::Operation>> },
+        ElseIfExpr { condition: ValueExpr, condition_code: Option<Vec<lir::Operation>> },
     }
 
     #[derive(Debug, Clone)]
@@ -164,15 +173,24 @@ pub fn walk_controll_flow(
 
         for oper in late_opers.drain(..) {
             match oper {
-                LateOperation::IfExpr { condition, if_true } => match lir.last_mut() {
+                LateOperation::IfExpr { condition_code, condition, if_true } => match lir.last_mut() {
                     Some(lir::Operation::IfChain {
                         chain,
                         base_case: _,
                     }) => {
-                        chain.push(If { condition, if_true });
+                        chain.push(If { condition_code, condition, if_true });
                     }
                     other => panic!("Late operation failure: expected if chain, found {other:#?}"),
                 },
+                LateOperation::ElseIfExpr { condition_code, condition, if_true } => match lir.last_mut() {
+                    Some(lir::Operation::IfChain {
+                        chain,
+                        base_case: _,
+                    }) => {
+                        chain.push(If { condition_code, condition, if_true });
+                    }
+                    other => panic!("Late operation failure: expected if chain, found {other:#?}"),
+                }
             }
         }
 
@@ -272,23 +290,13 @@ pub fn walk_controll_flow(
                     lir.push(lir::Operation::Update(Binding::Variable(ident), v_expr));
                 }
                 AstNode::If {
+                    condition_code,
                     condition,
                     code: if_code,
                 } => {
+                    let condition_code = condition_code.expect("Error while parsing LIR: If expr does not include condition code! (included by simplification)");
                     let condition_vexpr = ValueExpr::from_ast_node(*condition)
                         .expect("Value of condition is not a value expr: found {value:#?}");
-                    if let Err(e) = validate_valuexpr_useage(
-                        &condition_vexpr,
-                        &arguments,
-                        &functions,
-                        &global_consts,
-                        &global_ident_bindings,
-                        &locals,
-                        &temporaries,
-                    ) {
-                        panic!("Error validating value expr: {e:#?}");
-                    }
-                    valuexpr_update_temporaries(&condition_vexpr, &mut temporaries);
                     let if_code = if_code.unwrap();
                     lir.push(lir::Operation::IfChain { chain: vec![], base_case: None });
                     stack.push(Frame {
@@ -298,11 +306,34 @@ pub fn walk_controll_flow(
                     });
                     stack.push(Frame {
                         once_done: OnScopeFinish::IfExpr {
+                            condition_code: None,
                             condition: condition_vexpr,
                         },
                         code: if_code,
                         current_lir: vec![],
                     });
+                    stack.push(Frame { once_done: OnScopeFinish::FillConditionalCode, code: condition_code, current_lir: vec![] });
+                    continue 'walk;
+                }
+                AstNode::ElseIf { condition_code, condition, code: if_code } => {
+                    let condition_code = condition_code.expect("Error while parsing LIR: If expr does not include condition code! (included by simplification)");
+                    let condition_vexpr = ValueExpr::from_ast_node(*condition)
+                        .expect("Value of condition is not a value expr: found {value:#?}");
+                    let if_code = if_code.unwrap();
+                    stack.push(Frame {
+                        once_done,
+                        code,
+                        current_lir: lir,
+                    });
+                    stack.push(Frame {
+                        once_done: OnScopeFinish::ElseIfExpr {
+                            condition_code: None,
+                            condition: condition_vexpr,
+                        },
+                        code: if_code,
+                        current_lir: vec![],
+                    });
+                    stack.push(Frame { once_done: OnScopeFinish::FillConditionalCode, code: condition_code, current_lir: vec![] });
                     continue 'walk;
                 }
                 _ => todo!(),
@@ -314,10 +345,39 @@ pub fn walk_controll_flow(
                 global_lir = lir;
                 break 'walk;
             }
-            OnScopeFinish::IfExpr { condition } => late_opers.push(LateOperation::IfExpr {
+            OnScopeFinish::IfExpr { condition_code, condition } => late_opers.push(LateOperation::IfExpr {
+                condition_code: condition_code.unwrap(),
                 condition,
                 if_true: lir,
             }),
+            OnScopeFinish::ElseIfExpr { condition_code, condition } => late_opers.push(LateOperation::ElseIfExpr {
+                condition_code: condition_code.unwrap(),
+                condition,
+                if_true: lir,
+            }),
+            OnScopeFinish::FillConditionalCode => {
+                match stack.last_mut() {
+                    Some(Frame { once_done: OnScopeFinish::IfExpr { condition, condition_code } | OnScopeFinish::ElseIfExpr { condition, condition_code }, code: _, current_lir: _ }) => {
+                        debug_assert!(condition_code.is_none());
+                        *condition_code = Some(lir);
+
+                        // validation takes place here, so that it correctly modified bindings created within condition_code
+                        if let Err(e) = validate_valuexpr_useage(
+                            &condition,
+                            &arguments,
+                            &functions,
+                            &global_consts,
+                            &global_ident_bindings,
+                            &locals,
+                            &temporaries,
+                        ) {
+                            panic!("Error validating value expr: {e:#?}");
+                        }
+                        valuexpr_update_temporaries(&condition, &mut temporaries);
+                    }
+                    _ => panic!("FillConditionalCode not proceeded by a conditional!")
+                }
+            }
         }
     }
 
