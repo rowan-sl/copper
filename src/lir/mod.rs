@@ -137,8 +137,18 @@ impl ValueExpr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct If {
+    pub condition: ValueExpr,
+    pub if_true: Vec<Operation>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
     Bind(Binding, ValueExpr),
     Update(Binding, ValueExpr),
     // Unbind(Binding), might not be used?
+    IfChain {
+        chain: Vec<If>,
+        base_case: Option<Vec<Operation>>,
+    },
 }

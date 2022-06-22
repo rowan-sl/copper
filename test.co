@@ -9,7 +9,7 @@ fn main() -> ! {
 
 fn fib(n: num) -> num {
     if n <= 1 {
-		return n;
+        // return n;
     }
 
     // let grandparent: num = 1;

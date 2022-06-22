@@ -7,8 +7,8 @@ use crate::{
         constants::{ConstantMap, CstIdentMap},
         raw_functions::RawFnMap,
     },
-    lir::{self, Binding, ValueExpr},
-    parse2::{types::functions::FunctionArguments, AstBlock, AstNode},
+    lir::{self, Binding, If, ValueExpr},
+    parse2::{types::functions::FunctionArguments, AstNode},
     util::take_n,
 };
 
@@ -100,7 +100,7 @@ fn valuexpr_update_temporaries(expr: &ValueExpr, temporaries: &mut HashMap<u64, 
 
 pub fn walk_controll_flow(
     fn_name: String,
-    code: AstBlock,
+    code: Vec<AstNode>,
     arguments: &Vec<FunctionArguments>,
     functions: &RawFnMap,
     global_consts: &ConstantMap,
@@ -110,113 +110,216 @@ pub fn walk_controll_flow(
     let mut temporaries: HashMap<u64, Temporary> = HashMap::new();
     // let mut helper = ScopeHelper::new();
 
-    let mut lir: Vec<lir::Operation> = vec![];
-
     let mut simplified = AstNode::Block { inner: code }.simplify();
     debug_assert_eq!(simplified.len(), 1);
-    let mut simplified = if let AstNode::Block { inner } = simplified.pop().unwrap() {
+    let simplified = if let AstNode::Block { inner } = simplified.pop().unwrap() {
         inner
     } else {
         unreachable!();
     };
     info!("Simplified AST for function `{fn_name}`: {simplified:#?}");
 
-    while let Some(mut next) = take_n(&mut simplified, 1) {
-        info!("{next:?}");
-        assert_eq!(next.len(), 1);
-        let next = next.pop().unwrap();
-        match next {
-            AstNode::BindTmp { local_id, value } => {
-                let v_expr = ValueExpr::from_ast_node(*value)
-                    .expect("Value of temp binding is not a value expr: found {value:#?}");
-                if let Err(e) = validate_valuexpr_useage(
-                    &v_expr,
-                    &arguments,
-                    &functions,
-                    &global_consts,
-                    &global_ident_bindings,
-                    &locals,
-                    &temporaries,
-                ) {
-                    panic!("Error validating value expr: {e:#?}");
-                }
-                valuexpr_update_temporaries(&v_expr, &mut temporaries);
-                if let Some(..) = temporaries.insert(local_id, {
-                    Temporary {
-                        value: v_expr.clone(),
+    let global_lir: Vec<lir::Operation>;
+
+    #[derive(Debug, Clone)]
+    pub enum LateOperation {
+        IfExpr {
+            condition: ValueExpr,
+            if_true: Vec<lir::Operation>,
+        },
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum OnScopeFinish {
+        /// exit the function with the current LIR scope
+        Done,
+        /// an if expression that requires a block (incomplete). next stage on the stack will contain the scope that this belongs to, so place it there
+        IfExpr { condition: ValueExpr },
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Frame {
+        once_done: OnScopeFinish,
+        code: Vec<AstNode>,
+        current_lir: Vec<lir::Operation>,
+    }
+
+    let mut stack: Vec<Frame> = vec![Frame {
+        once_done: OnScopeFinish::Done,
+        code: simplified,
+        current_lir: vec![],
+    }];
+
+    let mut late_opers: Vec<LateOperation> = vec![];
+
+    'walk: loop {
+        let Frame {
+            once_done,
+            mut code,
+            current_lir: mut lir,
+        } = match stack.pop() {
+            Some(f) => f,
+            None => unreachable!(),
+        };
+
+        for oper in late_opers.drain(..) {
+            match oper {
+                LateOperation::IfExpr { condition, if_true } => match lir.last_mut() {
+                    Some(lir::Operation::IfChain {
+                        chain,
+                        base_case: _,
+                    }) => {
+                        chain.push(If { condition, if_true });
                     }
-                }) {
-                    panic!("Local temporary binding defined twice: {local_id}");
-                }
-                lir.push(lir::Operation::Bind(Binding::Temporary(local_id), v_expr))
+                    other => panic!("Late operation failure: expected if chain, found {other:#?}"),
+                },
             }
-            AstNode::Let {
-                ident,
-                typ: _, /* deal with this when typeck comes around */
-                value,
-            } => {
-                let v_expr = ValueExpr::from_ast_node(*value)
-                    .expect("Value of binding is not a value expr: found {value:#?}");
-                if let Err(e) = validate_valuexpr_useage(
-                    &v_expr,
-                    &arguments,
-                    &functions,
-                    &global_consts,
-                    &global_ident_bindings,
-                    &locals,
-                    &temporaries,
-                ) {
-                    panic!("Error validating value expr: {e:#?}");
+        }
+
+        while let Some(mut next) = take_n(&mut code, 1) {
+            info!("{next:?}");
+            assert_eq!(next.len(), 1);
+            let next = next.pop().unwrap();
+            match next {
+                AstNode::BindTmp { local_id, value } => {
+                    let v_expr = ValueExpr::from_ast_node(*value)
+                        .expect("Value of temp binding is not a value expr: found {value:#?}");
+                    if let Err(e) = validate_valuexpr_useage(
+                        &v_expr,
+                        &arguments,
+                        &functions,
+                        &global_consts,
+                        &global_ident_bindings,
+                        &locals,
+                        &temporaries,
+                    ) {
+                        panic!("Error validating value expr: {e:#?}");
+                    }
+                    valuexpr_update_temporaries(&v_expr, &mut temporaries);
+                    if let Some(..) = temporaries.insert(local_id, {
+                        Temporary {
+                            value: v_expr.clone(),
+                        }
+                    }) {
+                        panic!("Local temporary binding defined twice: {local_id}");
+                    }
+                    lir.push(lir::Operation::Bind(Binding::Temporary(local_id), v_expr))
                 }
-                valuexpr_update_temporaries(&v_expr, &mut temporaries);
-                if global_consts.contains_key(&ident) {
-                    panic!("Local variable defined with same name as existing constant! name: {ident:?}");
-                }
-                if global_ident_bindings.contains_key(&ident) {
-                    panic!("Local variable defined with same name as existing constant identifier binding! name: {ident:?}");
-                }
-                if let Some(..) = locals.insert(
-                    ident.clone(),
-                    Local {
-                        value: v_expr.clone(),
-                    },
-                ) {
-                    // not actually an errror lol
-                    // panic!("Local variable binding defined twice: {ident}");
-                }
-                lir.push(lir::Operation::Bind(Binding::Variable(ident), v_expr));
-            }
-            AstNode::Set { ident, value } => {
-                let v_expr = ValueExpr::from_ast_node(*value)
-                    .expect("Value of binding is not a value expr: found {value:#?}");
-                if let Err(e) = validate_valuexpr_useage(
-                    &v_expr,
-                    &arguments,
-                    &functions,
-                    &global_consts,
-                    &global_ident_bindings,
-                    &locals,
-                    &temporaries,
-                ) {
-                    panic!("Error validating value expr: {e:#?}");
-                }
-                valuexpr_update_temporaries(&v_expr, &mut temporaries);
-                if locals
-                    .insert(
+                AstNode::Let {
+                    ident,
+                    typ: _, /* deal with this when typeck comes around */
+                    value,
+                } => {
+                    let v_expr = ValueExpr::from_ast_node(*value)
+                        .expect("Value of binding is not a value expr: found {value:#?}");
+                    if let Err(e) = validate_valuexpr_useage(
+                        &v_expr,
+                        &arguments,
+                        &functions,
+                        &global_consts,
+                        &global_ident_bindings,
+                        &locals,
+                        &temporaries,
+                    ) {
+                        panic!("Error validating value expr: {e:#?}");
+                    }
+                    valuexpr_update_temporaries(&v_expr, &mut temporaries);
+                    if global_consts.contains_key(&ident) {
+                        panic!("Local variable defined with same name as existing constant! name: {ident:?}");
+                    }
+                    if global_ident_bindings.contains_key(&ident) {
+                        panic!("Local variable defined with same name as existing constant identifier binding! name: {ident:?}");
+                    }
+                    if let Some(..) = locals.insert(
                         ident.clone(),
                         Local {
                             value: v_expr.clone(),
                         },
-                    )
-                    .is_none()
-                {
-                    panic!("Attempted to update a variable that does not exist! (name:`{ident}`)");
+                    ) {
+                        // not actually an errror lol
+                        // panic!("Local variable binding defined twice: {ident}");
+                    }
+                    lir.push(lir::Operation::Bind(Binding::Variable(ident), v_expr));
                 }
-                lir.push(lir::Operation::Update(Binding::Variable(ident), v_expr));
+                AstNode::Set { ident, value } => {
+                    let v_expr = ValueExpr::from_ast_node(*value)
+                        .expect("Value of binding is not a value expr: found {value:#?}");
+                    if let Err(e) = validate_valuexpr_useage(
+                        &v_expr,
+                        &arguments,
+                        &functions,
+                        &global_consts,
+                        &global_ident_bindings,
+                        &locals,
+                        &temporaries,
+                    ) {
+                        panic!("Error validating value expr: {e:#?}");
+                    }
+                    valuexpr_update_temporaries(&v_expr, &mut temporaries);
+                    if locals
+                        .insert(
+                            ident.clone(),
+                            Local {
+                                value: v_expr.clone(),
+                            },
+                        )
+                        .is_none()
+                    {
+                        panic!(
+                            "Attempted to update a variable that does not exist! (name:`{ident}`)"
+                        );
+                    }
+                    lir.push(lir::Operation::Update(Binding::Variable(ident), v_expr));
+                }
+                AstNode::If {
+                    condition,
+                    code: if_code,
+                } => {
+                    let condition_vexpr = ValueExpr::from_ast_node(*condition)
+                        .expect("Value of condition is not a value expr: found {value:#?}");
+                    if let Err(e) = validate_valuexpr_useage(
+                        &condition_vexpr,
+                        &arguments,
+                        &functions,
+                        &global_consts,
+                        &global_ident_bindings,
+                        &locals,
+                        &temporaries,
+                    ) {
+                        panic!("Error validating value expr: {e:#?}");
+                    }
+                    valuexpr_update_temporaries(&condition_vexpr, &mut temporaries);
+                    let if_code = if_code.unwrap();
+                    lir.push(lir::Operation::IfChain { chain: vec![], base_case: None });
+                    stack.push(Frame {
+                        once_done,
+                        code,
+                        current_lir: lir,
+                    });
+                    stack.push(Frame {
+                        once_done: OnScopeFinish::IfExpr {
+                            condition: condition_vexpr,
+                        },
+                        code: if_code,
+                        current_lir: vec![],
+                    });
+                    continue 'walk;
+                }
+                _ => todo!(),
             }
-            _ => todo!(),
+        }
+
+        match once_done {
+            OnScopeFinish::Done => {
+                global_lir = lir;
+                break 'walk;
+            }
+            OnScopeFinish::IfExpr { condition } => late_opers.push(LateOperation::IfExpr {
+                condition,
+                if_true: lir,
+            }),
         }
     }
 
-    info!("LIR for function `{fn_name}`: {lir:#?}");
+    info!("LIR for function `{fn_name}`: {global_lir:#?}");
 }
