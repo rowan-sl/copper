@@ -1,3 +1,5 @@
+pub mod gen;
+
 pub const PRELUDE: &'static str = include_str!("../template/prelude.mlog");
 pub const PREPARE: &'static str = include_str!("../template/prepare.mlog");
 pub const CLEANUP: &'static str = include_str!("../template/cleanup.mlog");
@@ -55,6 +57,9 @@ impl MlogEmitter {
             } => {
                 self.raw
                     .push_str(&format!("write {in_var} {bank_id} {addr}\n"));
+            }
+            Instruction::Set { ident, value } => {
+                self.raw.push_str(&format!("set {ident} {value}\n"));
             }
             other => warn!("Unsuported instruction {other:#?}"),
         }
@@ -236,11 +241,15 @@ pub enum Instruction {
     priority: high
     status: unimplemented
     */
-    Set,
+    Set {
+        ident: String,
+        value: String,
+    },
     /*
     class: basic operation
     priority: very very high
-    status: unimplemented
+    status: done
+    mlog rep: set <ident> <value>
     */
     Operation,
     /*

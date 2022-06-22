@@ -13,7 +13,7 @@ pub mod lir;
 pub mod parse2;
 pub mod util;
 
-use std::{fmt::Write as _, /* fs::OpenOptions, io::Write as _, */ path::PathBuf};
+use std::{fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
@@ -122,22 +122,44 @@ fn main() -> Result<()> {
         );
     }
 
-    // info!("Generating mlog code...");
-    // let mut gen = codegen::MlogEmitter::new();
+    info!("Getting main fn LIR...");
 
-    // gen.include(codegen::PRELUDE.to_string());
-    // gen.include(codegen::PREPARE.to_string());
-    // //* codegen goes here
+    let raw_main_fn = prog.raw_functions.get(&String::from("main")).unwrap();
 
-    // //* codegen ends here
-    // gen.include(codegen::CLEANUP.to_string());
+    let main_fn_lir = analyzer::walk::walk_controll_flow(
+        "main".to_string(),
+        raw_main_fn.code.clone(),
+        &raw_main_fn.args,
+        &prog.raw_functions,
+        &function_builtins,
+        &prog.global_const,
+        &prog.const_idents,
+    );
 
-    // let raw_output = gen.into_output();
-    // let mut out = OpenOptions::new()
-    //     .write(true)
-    //     .create(true)
-    //     .open(args.out.unwrap())?;
-    // out.write_all(raw_output.as_bytes())?;
+    info!("Generating mlog code...");
+
+    let mut gen = codegen::MlogEmitter::new();
+
+    gen.include(codegen::PRELUDE.to_string());
+    gen.include(codegen::PREPARE.to_string());
+    gen.emit_raw("set null \"This is where the codes goes\"\n");
+    //* codegen goes here
+
+    let main_instrs = codegen::gen::gen_instructions(String::from("main"), main_fn_lir);
+    for instr in main_instrs {
+        gen.emit(instr)
+    }
+
+    //* codegen ends here
+    gen.emit_raw("\nset null \"This is where the codes ends\"");
+    gen.include(codegen::CLEANUP.to_string());
+
+    let raw_output = gen.into_output();
+    let mut out = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(args.out.unwrap())?;
+    out.write_all(raw_output.as_bytes())?;
 
     info!("Done");
     Ok(())
