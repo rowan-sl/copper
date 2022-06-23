@@ -1,3 +1,5 @@
+/// prints "Hello, World!" to the second connected message block (not the main status one)
+
 const ident out = "message2";
 
 fn main() -> ! {
