@@ -6,8 +6,26 @@ const ident out = "message2";
 fn main() -> ! {
     // let a: num = 10;
     // let x: num = fib(4);
-    println(msg);
+    let i: num = 0;
+    // let a: bool = 1 < 2;
+    // let a: bool = 1 <= 2;
+    // let a: bool = 1 > 2;
+    // let a: bool = 1 >= 2;
+    // let a: bool = 1 == 2;
+    // let a: bool = 1 + 2;
+    // let a: bool = 1 - 2;
+    // let a: bool = 1 * 2;
+    // let a: bool = 1 / 2;
+    // let a: bool = 1 % 2;
+    // let a: bool = true || false;
+    // let a: bool = true && false;
+    while i < 10 {
+        i = i + 1;
+        println(i);
+    }
     printflush(out);
+    // println(msg);
+    // printflush(out);
 }
 
 // fn fib(n: num) -> num {

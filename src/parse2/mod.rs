@@ -73,6 +73,9 @@ pub enum AstNode {
         code: Option<AstBlock>,
     },
     While {
+        /// this may or may not be populated, but if it is, then it MUST be included before evaluating `condition`
+        /// and can be omitted if `condition` is never evaluated
+        condition_code: Option<AstBlock>,
         condition: Box<AstNode>,
         /// will always be Some by the time it escapes the build_ast function
         code: Option<AstBlock>,
@@ -309,6 +312,7 @@ impl AstNode {
                 }]
             }
             AstNode::While {
+                condition_code: None,
                 condition,
                 code: Some(code),
             } => {
@@ -326,11 +330,11 @@ impl AstNode {
                     .flat_map(|n| n.simplify().into_iter())
                     .collect();
                 //output
-                output.push(AstNode::While {
+                vec![AstNode::While {
+                    condition_code: Some(output),
                     condition,
                     code: Some(code),
-                });
-                output
+                }]
             }
             AstNode::If {
                 condition_code: None,
@@ -770,6 +774,7 @@ impl AstNode {
                     val: BaseTokenVal::Token(Token::While),
                     ..
                 }), condition_tks @ ..] => Ok(AstNode::While {
+                    condition_code: None,
                     condition: Box::new(AstNode::parse(Tokens::Group(condition_tks.to_vec()))?),
                     code: None,
                 }),

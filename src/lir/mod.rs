@@ -154,6 +154,7 @@ pub enum Operation {
     },
     Return(Option<ValueExpr>),
     While {
+        condition_code: Vec<Operation>,
         condition: ValueExpr,
         code: Vec<Operation>,
     },

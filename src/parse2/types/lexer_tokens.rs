@@ -31,7 +31,7 @@ pub enum Op {
     Sub,
     Div,
     Mul,
-    Rem,
+    Mod,
     Eq,
     Gtn,
     Ltn,

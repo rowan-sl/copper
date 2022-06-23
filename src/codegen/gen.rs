@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::codegen::Instruction;
+use uuid::Uuid;
+
+use crate::codegen::{Instruction, MlogAddr};
 use crate::lir::{Binding, Operation, SimpleValue, ValueExpr};
 
 fn make_ident(
@@ -56,39 +58,62 @@ impl SimpleValue {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Metadata {
+    tag: Option<Uuid>,
+}
+
+impl Default for Metadata {
+    fn default() -> Self {
+        Self { tag: None }
+    }
+}
+
 pub fn gen_instructions(
     fn_name: String,
     lir: Vec<Operation>,
     constants: &HashMap<String, ValueExpr>,
     constant_idents: &HashMap<String, String>,
-) -> Vec<Instruction> {
-    let mut instructions: Vec<Instruction> = vec![];
+) -> Vec<(Metadata, Instruction)> {
+    let mut instructions: Vec<(Metadata, Instruction)> = vec![];
 
     for operation in lir {
         match operation {
-            Operation::Bind(binding, expr) => match expr {
+            Operation::Bind(binding, expr) | Operation::Update(binding, expr) => match expr {
                 ValueExpr::SimpleValue(val) => {
-                    instructions.push(Instruction::Set {
-                        ident: binding.gen_ident(&fn_name, constants),
-                        value: val.gen_mlog_literal(&fn_name, constants),
-                    });
+                    instructions.push((
+                        Metadata::default(),
+                        Instruction::Set {
+                            ident: binding.gen_ident(&fn_name, constants),
+                            value: val.gen_mlog_literal(&fn_name, constants),
+                        },
+                    ));
                 }
                 ValueExpr::FunctionCall { name, mut args } => match name.as_str() {
                     "println" => {
                         for arg in args {
-                            instructions.push(Instruction::Print {
-                                stuff: arg.gen_mlog_literal(&fn_name, constants),
-                            })
+                            instructions.push((
+                                Metadata::default(),
+                                Instruction::Print {
+                                    stuff: arg.gen_mlog_literal(&fn_name, constants),
+                                },
+                            ))
                         }
-                        instructions.push(Instruction::Print {
-                            stuff: String::from("\"\\n\""),
-                        })
+                        instructions.push((
+                            Metadata::default(),
+                            Instruction::Print {
+                                stuff: String::from("\"\\n\""),
+                            },
+                        ))
                     }
                     "print" => {
                         for arg in args {
-                            instructions.push(Instruction::Print {
-                                stuff: arg.gen_mlog_literal(&fn_name, constants),
-                            })
+                            instructions.push((
+                                Metadata::default(),
+                                Instruction::Print {
+                                    stuff: arg.gen_mlog_literal(&fn_name, constants),
+                                },
+                            ))
                         }
                     }
                     "printflush" => {
@@ -108,12 +133,25 @@ pub fn gen_instructions(
                             }
                             _ => panic!("Invalid arguments supplied to printflush: bad value"),
                         };
-                        instructions.push(Instruction::PrintFlush { to: ident })
+                        instructions
+                            .push((Metadata::default(), Instruction::PrintFlush { to: ident }))
                     }
                     other => {
                         todo!("Cannot call a non-builtin function. (attempting to call `{other}`)")
                     }
                 },
+                ValueExpr::Op { left, op, right } => {
+                    instructions.push((
+                        Metadata::default(),
+                        Instruction::Operation {
+                            op: op.into(),
+                            out: binding.gen_ident(&fn_name, constants),
+                            a: left.gen_mlog_literal(&fn_name, constants),
+                            b: right.gen_mlog_literal(&fn_name, constants),
+                        },
+                    ));
+                }
+                #[allow(unreachable_patterns)]
                 other => panic!("Unsuported ValueExpr: {other:#?}"),
             },
             Operation::Used(expr) => match expr {
@@ -122,6 +160,48 @@ pub fn gen_instructions(
                     "Operation::Used should only contain temporary bindings. found: {other:?}"
                 ),
             },
+            Operation::While { condition, condition_code, code } => {
+                let condition = match condition {
+                    ValueExpr::SimpleValue(val) => val.gen_mlog_literal(&fn_name, constants),
+                    _ => unreachable!("While statement condition must be a simple value"),
+                };
+                let loop_start = Uuid::new_v4();
+                let loop_end = Uuid::new_v4();
+                instructions.push((
+                    Metadata {
+                        tag: Some(loop_start),
+                    },
+                    Instruction::NoOp,
+                ));
+                instructions.extend(
+                    gen_instructions(fn_name.clone(), condition_code, constants, constant_idents).into_iter(),
+                );
+                instructions.push((
+                    Metadata::default(),
+                    Instruction::Jump {
+                        addr: crate::codegen::MlogAddr::Tag(loop_end),
+                        condition: crate::codegen::JumpCondition::NotEqual,
+                        args: Some((condition, String::from("true"))),
+                    },
+                ));
+                instructions.extend(
+                    gen_instructions(fn_name.clone(), code, constants, constant_idents).into_iter(),
+                );
+                instructions.push((
+                    Metadata::default(),
+                    Instruction::Jump {
+                        addr: crate::codegen::MlogAddr::Tag(loop_start),
+                        condition: crate::codegen::JumpCondition::Always,
+                        args: None,
+                    },
+                ));
+                instructions.push((
+                    Metadata {
+                        tag: Some(loop_end),
+                    },
+                    Instruction::NoOp,
+                ));
+            }
             other => panic!("Unsuported operation: {other:#?}"),
         }
     }
@@ -145,4 +225,40 @@ pub fn gen_constant_bindings(constants: HashMap<String, ValueExpr>) -> Vec<Instr
         }
     }
     instructions
+}
+
+/// offset: address of the first instruction in instrs
+pub fn make_tags_absoulute(
+    instrs: Vec<(Metadata, Instruction)>,
+    offset: usize,
+) -> Vec<Instruction> {
+    let mut map: HashMap<Uuid, usize> = HashMap::new();
+    let mut current_instr = 0usize + offset;
+    for (meta, _) in &instrs {
+        match meta.tag {
+            Some(tag) => {
+                map.insert(tag, current_instr);
+            }
+            None => {}
+        }
+        current_instr += 1;
+    }
+    instrs
+        .into_iter()
+        .map(|(_, b)| match b {
+            Instruction::Jump {
+                addr: MlogAddr::Tag(tag),
+                condition,
+                args,
+            } => Instruction::Jump {
+                addr: MlogAddr::Raw(
+                    *map.get(&tag)
+                        .expect("Tag {tag} was used but it was never defined!"),
+                ),
+                condition,
+                args,
+            },
+            other => other,
+        })
+        .collect()
 }

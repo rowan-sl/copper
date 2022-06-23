@@ -32,7 +32,7 @@ pub fn rules() -> Vec<Rule<Token>> {
         rule!(Token::Op(Op::Sub), r"^-$", 1),
         rule!(Token::Op(Op::Mul), r"^\*$", 1),
         rule!(Token::Op(Op::Div), r"^/$", 1),
-        rule!(Token::Op(Op::Rem), r"^%$", 1),
+        rule!(Token::Op(Op::Mod), r"^%$", 1),
         rule!(Token::Op(Op::Eq), r"^==$", 2),
         rule!(Token::Op(Op::GtnEq), r"^>=$", 2),
         rule!(Token::Op(Op::LtnEq), r"^<=$", 2),

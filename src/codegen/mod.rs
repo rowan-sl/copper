@@ -1,3 +1,7 @@
+use uuid::Uuid;
+
+use crate::parse2::types::lexer_tokens::Op;
+
 pub mod gen;
 
 pub const PRELUDE: &'static str = include_str!("../template/prelude.mlog");
@@ -68,6 +72,27 @@ impl MlogEmitter {
             }
             Instruction::PrintFlush { to } => {
                 self.raw.push_str(&format!("printflush {to}\n"));
+            }
+            Instruction::Operation { op, out, a, b } => {
+                self.raw
+                    .push_str(&format!("op {} {out} {a} {b}\n", op.to_string()));
+            }
+            Instruction::Jump {
+                addr,
+                condition,
+                args,
+            } => {
+                let addr = match addr {
+                    MlogAddr::Raw(addr) => addr,
+                    MlogAddr::Tag(..) => {
+                        unreachable!("Tag addrs must be filtered out before emission")
+                    }
+                };
+                self.raw.push_str(&if let Some((arg1, arg2)) = args {
+                    format!("jump {addr} {c} {arg1} {arg2}\n", c = condition.to_string())
+                } else {
+                    format!("jump {addr} {c} null null\n", c = condition.to_string())
+                })
             }
             other => warn!("Unsuported instruction {other:#?}"),
         }
@@ -182,6 +207,92 @@ pub enum DrawType {
     },
 }
 
+/// op add result a b
+/// op sub result a b
+/// op mul result a b
+/// op div result a b
+/// op idiv result a b (floor division)
+/// op mod result a b
+/// op pow result a b
+/// op equal result a b
+/// op notEqual result a b
+/// op land result a b (logical and)
+/// op lessThan result a b
+/// op lessThanEq result a b
+/// op greaterThan result a b
+/// op greaterThanEq result a b
+/// op strictEqual result a b
+/// op or result a b (bitwise, works as logical as well)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Operation {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    IDiv,
+    Mod,
+    Pow,
+    Eq,
+    NotEq,
+    LogicalAnd,
+    LessThan,
+    LessThanEq,
+    GreaterThan,
+    GreaterThanEq,
+    StrictEqual,
+    BitwiseOr,
+}
+
+impl ToString for Operation {
+    fn to_string(&self) -> String {
+        use Operation::*;
+        match self {
+            Add => "add",
+            Sub => "sub",
+            Mul => "mul",
+            Div => "div",
+            IDiv => "idiv",
+            Mod => "mod",
+            Pow => "pow",
+            Eq => "equal",
+            NotEq => "notEqual",
+            LogicalAnd => "land",
+            LessThan => "lessThan",
+            LessThanEq => "lessThanEq",
+            GreaterThan => "greaterThan",
+            GreaterThanEq => "greaterThanEq",
+            StrictEqual => "strictEqual",
+            BitwiseOr => "or",
+        }
+        .to_string()
+    }
+}
+
+impl From<Op> for Operation {
+    fn from(op: Op) -> Self {
+        match op {
+            Op::Add => Self::Add,
+            Op::Sub => Self::Sub,
+            Op::Div => Self::Div,
+            Op::Mul => Self::Mul,
+            Op::Mod => Self::Mod,
+            Op::Eq => Self::Eq,
+            Op::Gtn => Self::GreaterThan,
+            Op::Ltn => Self::LessThan,
+            Op::GtnEq => Self::GreaterThanEq,
+            Op::LtnEq => Self::LessThanEq,
+            Op::And => Self::LogicalAnd,
+            Op::Or => Self::BitwiseOr,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MlogAddr {
+    Raw(usize),
+    Tag(Uuid),
+}
+
 // TODO convert information to a spreadsheet
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Instruction {
@@ -271,11 +382,17 @@ pub enum Instruction {
     status: done
     mlog rep: set <ident> <value>
     */
-    Operation,
+    Operation {
+        op: Operation,
+        out: String,
+        a: String,
+        b: String,
+    },
     /*
     class: basic operation
     priority: very very high
-    status: unimplemented
+    status: done
+    mlog rep: op <op> <out> <a> <b>
     */
     Wait,
     /*
@@ -305,8 +422,9 @@ pub enum Instruction {
     mlog rep: "end"
     */
     Jump {
-        addr: usize,
+        addr: MlogAddr,
         condition: JumpCondition,
+        args: Option<(String, String)>,
     },
     /*
     class: basic operation, controll flow

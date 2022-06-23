@@ -170,6 +170,7 @@ pub fn walk_controll_flow(
         ElseExpr,
         WhileExpr {
             condition: ValueExpr,
+            condition_code: Option<Vec<lir::Operation>>,
         },
     }
 
@@ -444,25 +445,14 @@ pub fn walk_controll_flow(
                     }))
                 }
                 AstNode::While {
+                    condition_code,
                     condition,
                     code: loop_code,
                 } => {
                     let loop_code = loop_code.unwrap();
+                    let condition_code = condition_code.expect("Error while parsing LIR: If expr does not include condition code! (included by simplification)");
                     let condition_vexpr = ValueExpr::from_ast_node(*condition)
                         .expect("Value of binding is not a value expr: found {value:#?}");
-                    if let Err(e) = validate_valuexpr_useage(
-                        &condition_vexpr,
-                        &arguments,
-                        &functions,
-                        &builtin_functions,
-                        &global_consts,
-                        &global_ident_bindings,
-                        &locals,
-                        &temporaries,
-                    ) {
-                        panic!("Error validating value expr: {e:#?}");
-                    }
-                    valuexpr_update_temporaries(&condition_vexpr, &mut temporaries);
                     stack.push(Frame {
                         once_done,
                         code,
@@ -470,9 +460,15 @@ pub fn walk_controll_flow(
                     });
                     stack.push(Frame {
                         once_done: OnScopeFinish::WhileExpr {
+                            condition_code: None,
                             condition: condition_vexpr,
                         },
                         code: loop_code,
+                        current_lir: vec![],
+                    });
+                    stack.push(Frame {
+                        once_done: OnScopeFinish::FillConditionalCode,
+                        code: condition_code,
                         current_lir: vec![],
                     });
                     continue 'walk;
@@ -532,7 +528,8 @@ pub fn walk_controll_flow(
                             | OnScopeFinish::ElseIfExpr {
                                 condition,
                                 condition_code,
-                            },
+                            }
+                            | OnScopeFinish::WhileExpr { condition, condition_code },
                         code: _,
                         current_lir: _,
                     }) => {
@@ -557,12 +554,13 @@ pub fn walk_controll_flow(
                     _ => panic!("FillConditionalCode not proceeded by a conditional!"),
                 }
             }
-            OnScopeFinish::WhileExpr { condition } => {
+            OnScopeFinish::WhileExpr { condition, condition_code } => {
                 stack
                     .last_mut()
                     .unwrap()
                     .current_lir
                     .push(lir::Operation::While {
+                        condition_code: condition_code.unwrap(),
                         condition,
                         code: lir,
                     })
