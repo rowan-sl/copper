@@ -1,13 +1,13 @@
 // Hello, World!
 
 const msg: str = "Hello, World!";
-const ident out = "message1";
+const ident out = "message2";
 
 fn main() -> ! {
-    let a: num = 10;
+    // let a: num = 10;
     // let x: num = fib(4);
-    // println(msg);
-    // printflush(out);
+    println(msg);
+    printflush(out);
 }
 
 // fn fib(n: num) -> num {

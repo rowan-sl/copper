@@ -35,10 +35,12 @@ impl MlogEmitter {
                 self.raw.push('\n');
             }
             Instruction::NoOp => {
-                self.raw.push_str("noop");
+                self.raw.push_str("wait 0");
                 self.raw.push('\n');
             }
             Instruction::WaitForReset => {
+                // MAKE SHURE THAT THE ADDR \/ HERE IS ACTUALLY THE PROPER LINE IN THE PREULDE!!!!!!!!!!!!
+                // IF IT NOT WE WILL ALL SUFFER
                 self.raw.push_str("jump 26 always 0 0");
                 self.raw.push('\n');
             }
@@ -61,7 +63,19 @@ impl MlogEmitter {
             Instruction::Set { ident, value } => {
                 self.raw.push_str(&format!("set {ident} {value}\n"));
             }
+            Instruction::Print { stuff } => {
+                self.raw.push_str(&format!("print {stuff}\n"));
+            }
+            Instruction::PrintFlush { to } => {
+                self.raw.push_str(&format!("printflush {to}\n"));
+            }
             other => warn!("Unsuported instruction {other:#?}"),
+        }
+    }
+
+    pub fn emit_many(&mut self, instrs: Vec<Instruction>) {
+        for instr in instrs {
+            self.emit(instr);
         }
     }
 }
@@ -199,11 +213,14 @@ pub enum Instruction {
     priority: mid
     status: partially implemented, no generation for the final instr tho
     */
-    Print,
+    Print {
+        stuff: String,
+    },
     /*
     class: io, debug
     priority: VERY HIGH
-    status: unimplemented
+    status: done
+    mlog rep: print <stuff>
     */
     DrawFlush,
     /*
@@ -211,11 +228,14 @@ pub enum Instruction {
     priority: mid,
     status: unimplemented
     */
-    PrintFlush,
+    PrintFlush {
+        to: String,
+    },
     /*
     class: io, debug
     priority: very high
-    status: unimplemented
+    status: done
+    mlog rep: printflush <to>
     */
     GetLink,
     /*

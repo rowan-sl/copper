@@ -122,6 +122,10 @@ fn main() -> Result<()> {
         );
     }
 
+    info!("Generating LIR for constants...");
+
+    let constants_lir = analyzer::walk::generate_constats_lir(prog.global_const.clone());
+
     info!("Getting main fn LIR...");
 
     let raw_main_fn = prog.raw_functions.get(&String::from("main")).unwrap();
@@ -142,16 +146,24 @@ fn main() -> Result<()> {
 
     gen.include(codegen::PRELUDE.to_string());
     gen.include(codegen::PREPARE.to_string());
-    gen.emit_raw("set null \"This is where the codes goes\"\n");
     //* codegen goes here
 
-    let main_instrs = codegen::gen::gen_instructions(String::from("main"), main_fn_lir);
-    for instr in main_instrs {
-        gen.emit(instr)
-    }
+    let main_instrs = codegen::gen::gen_instructions(
+        String::from("main"),
+        main_fn_lir,
+        &constants_lir,
+        &prog.const_idents,
+    );
+
+    let constants_instrs = codegen::gen::gen_constant_bindings(constants_lir);
+
+    gen.emit_raw("set null \"constants section\"\n");
+    gen.emit_many(constants_instrs);
+    gen.emit_raw("\nset null \"main function section\"\n");
+    gen.emit_many(main_instrs);
+    gen.emit_raw("\nset null \"end of main function section\"");
 
     //* codegen ends here
-    gen.emit_raw("\nset null \"This is where the codes ends\"");
     gen.include(codegen::CLEANUP.to_string());
 
     let raw_output = gen.into_output();

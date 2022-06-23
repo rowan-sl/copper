@@ -12,6 +12,18 @@ use crate::{
     util::take_n,
 };
 
+pub fn generate_constats_lir(constants: ConstantMap) -> HashMap<String, ValueExpr> {
+    let mut res = HashMap::new();
+    for (name, value) in constants {
+        let vexpr = ValueExpr::from_ast_node(value.value)
+            .expect("Value of constant must be a valid ValueExpr");
+        assert!(vexpr.uses().is_empty());
+        assert!(vexpr.uses_functions().is_empty());
+        assert!(res.insert(name, vexpr).is_none());
+    }
+    res
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Local {
     value: ValueExpr,

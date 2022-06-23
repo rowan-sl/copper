@@ -1,0 +1,6 @@
+const ident out = "message2";
+
+fn main() -> ! {
+    println("Hello, World!");
+    printflush(out);
+}
