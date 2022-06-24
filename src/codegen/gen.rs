@@ -2,8 +2,10 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
+use crate::analyzer::visitors::raw_functions::RawFn;
 use crate::codegen::{Instruction, MlogAddr};
-use crate::lir::{Binding, Operation, SimpleValue, ValueExpr};
+use crate::lir::{Binding, Operation, SimpleValue, ValueExpr, If};
+use crate::parse2::types::functions::FunctionArguments;
 
 fn make_ident(
     raw_ident: &String,
@@ -202,6 +204,57 @@ pub fn gen_instructions(
                     Instruction::NoOp,
                 ));
             }
+            Operation::IfChain { chain, base_case } => {
+                let chain_end_tag = Uuid::new_v4();
+
+                for link in chain {
+                    let If { condition, condition_code, if_true } = link;
+                    let after_tag = Uuid::new_v4();
+                    let condition = match condition {
+                        ValueExpr::SimpleValue(val) => val.gen_mlog_literal(&fn_name, constants),
+                        _ => unreachable!("If statement condition must be a simple value"),
+                    };
+                    let condition_instrs = gen_instructions(fn_name.clone(), condition_code, constants, constant_idents);
+                    instructions.extend(condition_instrs.into_iter());
+                    instructions.push((
+                        Metadata::default(),
+                        Instruction::Jump {
+                            addr: crate::codegen::MlogAddr::Tag(after_tag),
+                            condition: crate::codegen::JumpCondition::NotEqual,
+                            args: Some((condition, String::from("true"))),
+                        },
+                    ));
+                    let if_true_instrs = gen_instructions(fn_name.clone(), if_true, constants, constant_idents);
+                    instructions.extend(if_true_instrs.into_iter());
+                    instructions.push((
+                        Metadata::default(),
+                        Instruction::Jump {
+                            addr: crate::codegen::MlogAddr::Tag(chain_end_tag),
+                            condition: crate::codegen::JumpCondition::Always,
+                            args: None,
+                        },
+                    ));
+                    instructions.push((
+                        Metadata {
+                            tag: Some(after_tag),
+                        },
+                        Instruction::NoOp,
+                    ));
+                }
+
+                if let Some(base_case) = base_case {
+                    instructions.extend(
+                        gen_instructions(fn_name.clone(), base_case, constants, constant_idents).into_iter(),
+                    );
+                }
+
+                instructions.push((
+                    Metadata {
+                        tag: Some(chain_end_tag),
+                    },
+                    Instruction::NoOp,
+                ));
+            }
             other => panic!("Unsuported operation: {other:#?}"),
         }
     }
@@ -261,4 +314,17 @@ pub fn make_tags_absoulute(
             other => other,
         })
         .collect()
+}
+
+pub fn gen_instructions_for_function(
+    fn_name: String,
+    arguments: Vec<FunctionArguments>,
+    code: Vec<Operation>,
+    constants: &HashMap<String, ValueExpr>,
+    constant_idents: &HashMap<String, String>,
+    stack_memecell_name: String,
+    stack_base_addr: usize,
+    stack_size: usize,
+) -> Vec<(Metadata, Instruction)> {
+    todo!()
 }

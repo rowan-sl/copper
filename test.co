@@ -1,12 +1,11 @@
 // Hello, World!
 
-const msg: str = "Hello, World!";
-const ident out = "message2";
+// const msg: str = "Hello, World!";
+// const ident out = "message2";
 
 fn main() -> ! {
     // let a: num = 10;
     // let x: num = fib(4);
-    let i: num = 0;
     // let a: bool = 1 < 2;
     // let a: bool = 1 <= 2;
     // let a: bool = 1 > 2;
@@ -19,13 +18,20 @@ fn main() -> ! {
     // let a: bool = 1 % 2;
     // let a: bool = true || false;
     // let a: bool = true && false;
-    while i < 10 {
-        i = i + 1;
-        println(i);
-    }
-    printflush(out);
+
+    // let i: num = 0;
+    // while i < 10 {
+    //     i = i + 1;
+    //     println(i);
+    // }
+    // printflush(out);
+
     // println(msg);
     // printflush(out);
+
+    if true {
+        let a: num = 1;
+    }
 }
 
 // fn fib(n: num) -> num {

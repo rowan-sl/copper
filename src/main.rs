@@ -162,12 +162,11 @@ fn main() -> Result<()> {
         codegen::PRELUDE.lines().count() + codegen::PREPARE.lines().count() + constants_instrs.len(),
     );
 
-    // gen.emit_raw("set null \"constants section\"\n");
+    gen.emit_raw("# constants section\n");
     gen.emit_many(constants_instrs);
-    // gen.emit_raw("\nset null \"main function section\"\n");
-
+    gen.emit_raw("\n# main function section\n");
     gen.emit_many(pure_main_instrs);
-    // gen.emit_raw("\nset null \"end of main function section\"");
+    gen.emit_raw("\n# end of main function section");
 
     //* codegen ends here
     gen.include(codegen::CLEANUP.to_string());
