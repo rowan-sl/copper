@@ -1,9 +1,9 @@
 // Hello, World!
 
 // const msg: str = "Hello, World!";
-// const ident out = "message2";
+const ident out = "message2";
 
-fn main() -> ! {
+fn main() -> num {
     // let a: num = 10;
     // let x: num = fib(4);
     // let a: bool = 1 < 2;
@@ -28,10 +28,21 @@ fn main() -> ! {
 
     // println(msg);
     // printflush(out);
+    // println("Very veryyyyyyyyyyyyyyyyyyyyyyyyyyyyyy long textttttttttt");
+    // printflush(out);
+    // if true {
+    //     let a: num = 1;
+    // }
+    hello();
+    // println("Main fn done");
+    // printflush(out);
+    return 0;
+}
 
-    if true {
-        let a: num = 1;
-    }
+fn hello() -> null {
+    println("Hello, World!");
+    printflush(out);
+    return;
 }
 
 // fn fib(n: num) -> num {

@@ -48,6 +48,19 @@ impl MlogEmitter {
                 self.raw.push_str("jump 26 always 0 0");
                 self.raw.push('\n');
             }
+            Instruction::Trap => {
+                // NOTE: since this is multi-instruction, an edge case must be added to Instruction::worth to make this work
+                self.emit(Instruction::Print {
+                    stuff: "\"Error: Encountered trap instr at addr #\"".into(),
+                });
+                self.emit(Instruction::Print {
+                    stuff: "@counter".into(),
+                });
+                self.emit(Instruction::PrintFlush {
+                    to: "message1".into(),
+                });
+                self.emit(Instruction::WaitForReset);
+            }
             Instruction::Read {
                 out_var,
                 bank_id,
@@ -66,6 +79,9 @@ impl MlogEmitter {
             }
             Instruction::Set { ident, value } => {
                 self.raw.push_str(&format!("set {ident} {value}\n"));
+            }
+            Instruction::SetToTagAddr { .. } => {
+                unreachable!("this should be converted into a Set instr before emission")
             }
             Instruction::Print { stuff } => {
                 self.raw.push_str(&format!("print {stuff}\n"));
@@ -94,7 +110,10 @@ impl MlogEmitter {
                     format!("jump {addr} {c} null null\n", c = condition.to_string())
                 })
             }
-            other => warn!("Unsuported instruction {other:#?}"),
+            Instruction::Comment(text) => {
+                self.raw.push_str(&format!("# {text}\n"));
+            }
+            other => panic!("Unsuported instruction {other:#?}"),
         }
     }
 
@@ -299,7 +318,7 @@ pub enum Instruction {
     Read {
         out_var: String,
         bank_id: String,
-        addr: usize,
+        addr: String,
     },
     /*
     class: io
@@ -310,7 +329,7 @@ pub enum Instruction {
     Write {
         in_var: String,
         bank_id: String,
-        addr: usize,
+        addr: String,
     },
     /*
     class: io
@@ -381,6 +400,13 @@ pub enum Instruction {
     priority: very very high
     status: done
     mlog rep: set <ident> <value>
+    */
+    SetToTagAddr {
+        tag: Uuid,
+        ident: String,
+    },
+    /*
+    this sets `ident` to the real address of `tag`. replaced by Set before emission
     */
     Operation {
         op: Operation,
@@ -488,6 +514,29 @@ pub enum Instruction {
     args: none
     mlog rep: `jump <> always 0 0` (spacific line in preulde)
     */
+    Trap,
+    /*
+    all this does is emit an error message with the current LOC, and then emit WaitForReset
+
+    class: system operation, not in mindustry, requires prelude
+    priority: high
+    status: implemented
+
+    args: none
+    */
+    Comment(String)
+}
+
+impl Instruction {
+    /// number of "real" mlog instructions this is equivilant to.
+    ///
+    /// yes, it has come to this
+    pub fn worth(&self) -> usize {
+        match self {
+            Self::Trap => 4,
+            _ => 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

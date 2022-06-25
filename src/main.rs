@@ -13,12 +13,13 @@ pub mod lir;
 pub mod parse2;
 pub mod util;
 
-use std::{fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf};
+use std::{fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf, collections::HashMap};
 
 use anyhow::Result;
 use clap::Parser;
+use uuid::Uuid;
 
-use crate::parse2::AstNode;
+use crate::{parse2::AstNode, codegen::{gen::Metadata, Instruction}};
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -94,24 +95,20 @@ fn main() -> Result<()> {
     let prog = analyzer::interpret_ast(ast)?;
     debug!("program: {:#?}", prog);
 
-    // let main_fn_code = prog.raw_functions.remove(&"main".to_string()).unwrap();
-    // analyzer::walk::walk_controll_flow(
-    //     "main".to_string(),
-    //     main_fn_code.code,
-    //     &prog.raw_functions,
-    //     &prog.global_const,
-    //     &prog.const_idents,
-    // );
+    info!("Performing validiation and generating LIR");
 
-    info!("Performing validiation and generating IR");
+    info!("Generating LIR for constants...");
+    let constants_lir = analyzer::walk::generate_constats_lir(prog.global_const.clone());
 
-    let mut function_builtins = std::collections::HashMap::new();
+    info!("Generating LIR for functions...");
+    let mut function_builtins = HashMap::new();
     function_builtins.insert("println".to_string(), ());
     function_builtins.insert("printflush".to_string(), ());
 
+    let mut function_lir: HashMap<String, Vec<lir::Operation>> = HashMap::new();
     for (name, function) in &prog.raw_functions {
-        info!("Validing function `{name}`");
-        analyzer::walk::walk_controll_flow(
+        info!("Generating LIR for function `{name}`");
+        let lir = analyzer::walk::walk_controll_flow(
             name.clone(),
             function.code.clone(),
             &function.args,
@@ -120,25 +117,8 @@ fn main() -> Result<()> {
             &prog.global_const,
             &prog.const_idents,
         );
+        function_lir.insert(name.clone(), lir);
     }
-
-    info!("Generating LIR for constants...");
-
-    let constants_lir = analyzer::walk::generate_constats_lir(prog.global_const.clone());
-
-    info!("Getting main fn LIR...");
-
-    let raw_main_fn = prog.raw_functions.get(&String::from("main")).unwrap();
-
-    let main_fn_lir = analyzer::walk::walk_controll_flow(
-        "main".to_string(),
-        raw_main_fn.code.clone(),
-        &raw_main_fn.args,
-        &prog.raw_functions,
-        &function_builtins,
-        &prog.global_const,
-        &prog.const_idents,
-    );
 
     info!("Generating mlog code...");
 
@@ -148,25 +128,74 @@ fn main() -> Result<()> {
     gen.include(codegen::PREPARE.to_string());
     //* codegen goes here
 
-    let main_instrs = codegen::gen::gen_instructions(
-        String::from("main"),
-        main_fn_lir,
+    info!("Generating mlog for constants...");
+    let constants_instrs = codegen::gen::gen_constant_bindings(constants_lir.clone());
+    gen.emit_raw("# constants section\n");
+    gen.emit_many(constants_instrs.clone());
+
+    let mut function_tags: HashMap<String, Uuid> = HashMap::new();
+    for (name, _) in &prog.raw_functions {
+        function_tags.insert(name.clone(), Uuid::new_v4());
+    }
+
+    info!("Generating mlog for functions...");
+    gen.emit_raw("\n# function section\n");
+    let mut instructions: Vec<(Metadata, Instruction)> = vec![];
+
+    let main_section_tag = Uuid::new_v4();
+    instructions.push((
+        Metadata::default(),
+        Instruction::Jump { addr: codegen::MlogAddr::Tag(main_section_tag), condition: codegen::JumpCondition::Always, args: None }
+    ));
+
+    const STACK_MEMCELL_NAME: &str = "bank1";
+    const STACK_BASE_ADDR: usize = 0;
+    const STACK_SIZE: usize = 510;//its right, dont touch
+
+    for (name, lir) in function_lir {
+        info!("Generating mlog for function {name}");
+        instructions.push((Metadata::default(), Instruction::Comment(format!("code for function {name}"))));
+        let fn_instrs = codegen::gen::gen_instructions_for_function(
+            name,
+            lir,
+            &constants_lir,
+            &prog.const_idents,
+            STACK_MEMCELL_NAME.to_string(),
+            STACK_BASE_ADDR,
+            STACK_SIZE,
+            &prog.raw_functions,
+            &function_tags,
+        );
+
+        instructions.extend(fn_instrs);
+    }
+
+    instructions.push((Metadata::default(), Instruction::Comment("__entry fn code".to_string())));
+
+    instructions.push((
+        Metadata { tag: Some(main_section_tag) },
+        Instruction::NoOp
+    ));
+
+    instructions.extend(codegen::gen::gen_instructions_for_function_call(
+        "__entry".to_string(),
+        "main".to_string(),
+        vec![],
+        "null".to_string(),
+        STACK_MEMCELL_NAME.to_string(),
+        STACK_BASE_ADDR,
+        STACK_SIZE,
         &constants_lir,
-        &prog.const_idents,
-    );
+        &prog.raw_functions,
+        &function_tags,
+    ));
 
-    let constants_instrs = codegen::gen::gen_constant_bindings(constants_lir);
-
-    let pure_main_instrs = codegen::gen::make_tags_absoulute(
-        main_instrs,
+    let pure_fn_instrs = codegen::gen::make_tags_absoulute(
+        instructions,
         codegen::PRELUDE.lines().count() + codegen::PREPARE.lines().count() + constants_instrs.len(),
     );
 
-    gen.emit_raw("# constants section\n");
-    gen.emit_many(constants_instrs);
-    gen.emit_raw("\n# main function section\n");
-    gen.emit_many(pure_main_instrs);
-    gen.emit_raw("\n# end of main function section");
+    gen.emit_many(pure_fn_instrs);
 
     //* codegen ends here
     gen.include(codegen::CLEANUP.to_string());

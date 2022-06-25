@@ -529,7 +529,10 @@ pub fn walk_controll_flow(
                                 condition,
                                 condition_code,
                             }
-                            | OnScopeFinish::WhileExpr { condition, condition_code },
+                            | OnScopeFinish::WhileExpr {
+                                condition,
+                                condition_code,
+                            },
                         code: _,
                         current_lir: _,
                     }) => {
@@ -554,17 +557,18 @@ pub fn walk_controll_flow(
                     _ => panic!("FillConditionalCode not proceeded by a conditional!"),
                 }
             }
-            OnScopeFinish::WhileExpr { condition, condition_code } => {
-                stack
-                    .last_mut()
-                    .unwrap()
-                    .current_lir
-                    .push(lir::Operation::While {
-                        condition_code: condition_code.unwrap(),
-                        condition,
-                        code: lir,
-                    })
-            }
+            OnScopeFinish::WhileExpr {
+                condition,
+                condition_code,
+            } => stack
+                .last_mut()
+                .unwrap()
+                .current_lir
+                .push(lir::Operation::While {
+                    condition_code: condition_code.unwrap(),
+                    condition,
+                    code: lir,
+                }),
         }
     }
 
