@@ -524,7 +524,7 @@ pub enum Instruction {
 
     args: none
     */
-    Comment(String)
+    Comment(String),
 }
 
 impl Instruction {

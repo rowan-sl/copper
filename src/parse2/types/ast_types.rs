@@ -1,6 +1,6 @@
 pub use crate::parse2::types::lexer_tokens::{BaseToken, BaseTokenVal, Token};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ASTType {
     Named(String),
     Never,

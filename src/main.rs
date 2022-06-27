@@ -11,15 +11,19 @@ pub mod codegen;
 pub mod lexer2;
 pub mod lir;
 pub mod parse2;
+pub mod typing;
 pub mod util;
 
-use std::{fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf, collections::HashMap};
+use std::{collections::HashMap, fmt::Write as _, fs::OpenOptions, io::Write as _, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
 use uuid::Uuid;
 
-use crate::{parse2::AstNode, codegen::{gen::Metadata, Instruction}};
+use crate::{
+    codegen::{gen::Metadata, Instruction},
+    parse2::AstNode,
+};
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -95,6 +99,9 @@ fn main() -> Result<()> {
     let prog = analyzer::interpret_ast(ast)?;
     debug!("program: {:#?}", prog);
 
+    info!("Performing typeck...");
+    analyzer::typeck::perform(&prog);
+
     info!("Performing validiation and generating LIR");
 
     info!("Generating LIR for constants...");
@@ -145,16 +152,23 @@ fn main() -> Result<()> {
     let main_section_tag = Uuid::new_v4();
     instructions.push((
         Metadata::default(),
-        Instruction::Jump { addr: codegen::MlogAddr::Tag(main_section_tag), condition: codegen::JumpCondition::Always, args: None }
+        Instruction::Jump {
+            addr: codegen::MlogAddr::Tag(main_section_tag),
+            condition: codegen::JumpCondition::Always,
+            args: None,
+        },
     ));
 
     const STACK_MEMCELL_NAME: &str = "bank1";
     const STACK_BASE_ADDR: usize = 0;
-    const STACK_SIZE: usize = 510;//its right, dont touch
+    const STACK_SIZE: usize = 510; //its right, dont touch
 
     for (name, lir) in function_lir {
         info!("Generating mlog for function {name}");
-        instructions.push((Metadata::default(), Instruction::Comment(format!("code for function {name}"))));
+        instructions.push((
+            Metadata::default(),
+            Instruction::Comment(format!("code for function {name}")),
+        ));
         let fn_instrs = codegen::gen::gen_instructions_for_function(
             name,
             lir,
@@ -170,11 +184,16 @@ fn main() -> Result<()> {
         instructions.extend(fn_instrs);
     }
 
-    instructions.push((Metadata::default(), Instruction::Comment("__entry fn code".to_string())));
+    instructions.push((
+        Metadata::default(),
+        Instruction::Comment("__entry fn code".to_string()),
+    ));
 
     instructions.push((
-        Metadata { tag: Some(main_section_tag) },
-        Instruction::NoOp
+        Metadata {
+            tag: Some(main_section_tag),
+        },
+        Instruction::NoOp,
     ));
 
     instructions.extend(codegen::gen::gen_instructions_for_function_call(
@@ -192,7 +211,9 @@ fn main() -> Result<()> {
 
     let pure_fn_instrs = codegen::gen::make_tags_absoulute(
         instructions,
-        codegen::PRELUDE.lines().count() + codegen::PREPARE.lines().count() + constants_instrs.len(),
+        codegen::PRELUDE.lines().count()
+            + codegen::PREPARE.lines().count()
+            + constants_instrs.len(),
     );
 
     gen.emit_many(pure_fn_instrs);

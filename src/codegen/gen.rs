@@ -339,7 +339,9 @@ pub fn make_tags_absoulute(
     let mut map: HashMap<Uuid, usize> = HashMap::new();
     let mut current_instr = 0usize + offset;
     for (meta, instr) in &instrs {
-        if let Instruction::Comment(..) = instr { continue }
+        if let Instruction::Comment(..) = instr {
+            continue;
+        }
         match meta.tag {
             Some(tag) => {
                 map.insert(tag, current_instr);
@@ -405,14 +407,21 @@ pub fn gen_instructions_for_function(
         fn_name.clone(),
         code,
         constants,
-        constant_idents, stack_memcell_name, stack_base_addr, stack_size, functions, function_tags
+        constant_idents,
+        stack_memcell_name,
+        stack_base_addr,
+        stack_size,
+        functions,
+        function_tags,
     ));
 
     // juuuust in case
     instructions.push((
         Metadata::default(),
         Instruction::Print {
-            stuff: format!("\"Error: function `{fn_name}` does not include a return statement\\n\""),
+            stuff: format!(
+                "\"Error: function `{fn_name}` does not include a return statement\\n\""
+            ),
         },
     ));
     instructions.push((Metadata::default(), Instruction::Trap));

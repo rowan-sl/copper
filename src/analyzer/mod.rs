@@ -1,3 +1,4 @@
+pub mod typeck;
 pub mod visitor;
 pub mod visitors;
 pub mod walk;
